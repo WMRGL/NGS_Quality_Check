@@ -56,8 +56,8 @@ def get_inputs(ws_1, ws_2):
     ws_2_excel_reports = ws_2 + 'excel_reports_{}_{}/'.format(ws_2_panel, ws_2_name)
     ws_2_list = pd.DataFrame(os.listdir(ws_2_excel_reports), columns=['sample_name'])
 
-    xls_rep_1 = ws_1_list[~ws_1_list['sample_name'].str.contains('Neg|-fastq-bam-check')]
-    xls_rep_2 = ws_2_list[~ws_2_list['sample_name'].str.contains('Neg|-fastq-bam-check')]
+    xls_rep_1 = ws_1_list[~ws_1_list['sample_name'].str.contains('Neg|-fastq-bam-check|merged-variants')]
+    xls_rep_2 = ws_2_list[~ws_2_list['sample_name'].str.contains('Neg|-fastq-bam-check|merged-variants')]
     neg_rep_1 = ws_1_list[ws_1_list['sample_name'].str.contains('Neg')]
     neg_rep_2 = ws_2_list[ws_2_list['sample_name'].str.contains('Neg')]
     fastq_xls_1 = ws_1_list[ws_1_list['sample_name'].str.contains('fastq-bam-check')]
