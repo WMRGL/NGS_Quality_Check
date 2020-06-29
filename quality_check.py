@@ -382,11 +382,6 @@ def run_details(cmd,xls_rep,run_details_df):
 
     bed = [bed_html, bed_file_table]
 
-    with open('bed_test.html', 'w') as file:
-        file.write(bed_html)
-    # bed_files = ", ".join(bed_files)
-
-
     run_details_df = run_details_df.append({'Worksheet': worksheet,
                                             'Pipeline version': pipe_version,
                                             'Experiment name': experiment_name,
@@ -396,51 +391,61 @@ def run_details(cmd,xls_rep,run_details_df):
 
     return run_details_df, bed
 
+def tshc_main(ws_1, ws_2):
+    '''
+    A function to organise the TSHC output quality check function calls
 
-xls_rep_1, xls_rep_2, neg_rep, fastq_bam_1, fastq_bam_2, kin_xls, vcf_dir_1, vcf_dir_2, cmd_log_1, cmd_log_2, panel = get_inputs(args.ws_1, args.ws_2)
+    '''
 
-pd.set_option('display.max_colwidth', -1)
-check_result_df = pd.DataFrame(columns=[ 'Worksheet','Check', 'Description','Result'])
-run_details_df = pd.DataFrame(columns=['Worksheet', 'Pipeline version', 'Experiment name', 'Bed files', 'AB threshold'])
+    xls_rep_1, xls_rep_2, neg_rep, fastq_bam_1, fastq_bam_2, kin_xls, vcf_dir_1, vcf_dir_2, cmd_log_1, cmd_log_2, panel = get_inputs(ws_1, ws_2)
 
-# ws_1 checks
-check_result_df = results_excel_check(xls_rep_1, check_result_df)
-check_result_df = vcf_dir_check(vcf_dir_1, check_result_df)
-check_result_df = fastq_bam_check(fastq_bam_1, check_result_df)
+    pd.set_option('display.max_colwidth', -1)
+    check_result_df = pd.DataFrame(columns=[ 'Worksheet','Check', 'Description','Result'])
+    run_details_df = pd.DataFrame(columns=['Worksheet', 'Pipeline version', 'Experiment name', 'Bed files', 'AB threshold'])
+
+    # ws_1 checks
+    check_result_df = results_excel_check(xls_rep_1, check_result_df)
+    check_result_df = vcf_dir_check(vcf_dir_1, check_result_df)
+    check_result_df = fastq_bam_check(fastq_bam_1, check_result_df)
+
+    # ws_2 checks
+    check_result_df = results_excel_check(xls_rep_2, check_result_df)
+    check_result_df = vcf_dir_check(vcf_dir_2, check_result_df)
+    check_result_df = fastq_bam_check(fastq_bam_2, check_result_df)
+
+    # pair checks
+    check_result_df = neg_excel_check(neg_rep, check_result_df)
+    check_result_df = kinship_check(kin_xls, check_result_df)
+
+    # run details
+    run_details_df, bed_1 = run_details(cmd_log_1, xls_rep_1, run_details_df)
+    run_details_df, bed_2 = run_details(cmd_log_2, xls_rep_2, run_details_df)
+
+    # sort
+    check_result_df = check_result_df.sort_values(by=['Worksheet'])
+    run_details_df = run_details_df.sort_values(by=['Worksheet'])
+    #create static html output
+    name, html_report = generate_html_output(check_result_df,run_details_df, panel, bed_1, bed_2)
+
+    # write html report to both results directories
+    ws_1_out = args.ws_1
+    ws_2_out = args.ws_2
+
+    if args.out_dir == None:
+        os.chdir(ws_1_out)
+        with open(name, 'w') as file:
+            file.write(html_report)
+        os.chdir(ws_2_out)
+        with open(name, 'w') as file:
+            file.write(html_report)
+    else:
+        print(f'Saving html reports to {args.out_dir}')
+        os.chdir(args.out_dir)
+        with open(name, 'w') as file:
+            file.write(html_report)
 
 
-# ws_2 checks
-check_result_df = results_excel_check(xls_rep_2, check_result_df)
-check_result_df = vcf_dir_check(vcf_dir_2, check_result_df)
-check_result_df = fastq_bam_check(fastq_bam_2, check_result_df)
 
-# pair checks
-check_result_df = neg_excel_check(neg_rep, check_result_df)
-check_result_df = kinship_check(kin_xls, check_result_df)
-
-# run details
-run_details_df, bed_1 = run_details(cmd_log_1, xls_rep_1, run_details_df)
-run_details_df, bed_2 = run_details(cmd_log_2, xls_rep_2, run_details_df)
-
-# sort
-check_result_df = check_result_df.sort_values(by=['Worksheet'])
-run_details_df = run_details_df.sort_values(by=['Worksheet'])
-#create static html output
-name, html_report = generate_html_output(check_result_df,run_details_df, panel, bed_1, bed_2)
-
-# write html report to both results directories
-ws_1_out = args.ws_1
-ws_2_out = args.ws_2
-
-if args.out_dir == None:
-    os.chdir(ws_1_out)
-    with open(name, 'w') as file:
-        file.write(html_report)
-    os.chdir(ws_2_out)
-    with open(name, 'w') as file:
-        file.write(html_report)
-else:
-    print(f'Saving html reports to {args.out_dir}')
-    os.chdir(args.out_dir)
-    with open(name, 'w') as file:
-        file.write(html_report)
+ws_1 = args.ws_1
+ws_2 = args.ws_2
+tshc_main(ws_1, ws_2)
