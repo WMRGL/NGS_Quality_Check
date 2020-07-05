@@ -6,11 +6,11 @@ import re
 import numpy as np
 
 
-
 parser = argparse.ArgumentParser()
 parser.add_argument('-ws_1', action='store', required=True, help='Path to worksheet 1 output files include TSHC_<ws>_version dir')
-parser.add_argument('-ws_2', action='store', required=True, help='Path to worksheet 2 output files include TSHC_<ws>_version dir')
-parser.add_argument('-out_dir', action='store', nargs='?', help='Specifing an output directory to store html reports')
+parser.add_argument('-ws_2', action='store', help='Path to worksheet 2 output files include TSHC_<ws>_version dir')
+parser.add_argument('-out_dir', action='store', help='Specifing an output directory to store html reports')
+parser.add_argument('-samplesheet', action='store', help='SampleSheet requrired for HO panel quality checks')
 args = parser.parse_args()
 
 
@@ -29,6 +29,8 @@ def get_inputs(ws_1, ws_2):
         9) cmd_log_1 - command run text file (1st w/s in pair)
         10) cmd_log_2 - command run text file (2nd w/s pair)
         11) Panel - Name of panel
+
+    TODO- Moving panel assignment out of this function.
 
     '''
 
@@ -444,8 +446,85 @@ def tshc_main(ws_1, ws_2):
         with open(name, 'w') as file:
             file.write(html_report)
 
+def assign_panel(ws_1, ws_2, sample_sheet):
+    '''
+    Assiging a panel and <panel>_main funtion to process pipeline output.
+    
+    TODO --> For now I have implemented this for TSMP... other panels to follow
 
+    '''
+    panel = re.search(panel_regex, ws_1).group(1)
+
+    if panel == 'TSMP':
+        tsmp_main(ws_1, sample_sheet)
+    elif panel == 'TSHC':
+        tshc_main(ws_1, ws_2)
+    else:
+        print('Are you sure....Never heard of this panel')
+
+
+def tsmp_main(ws_1, sample_sheet):
+    '''
+    A function to organise the TSMP function calls
+
+    The following functions must be run to produce the quality check report:
+
+    1. Assign varaiables for samples in worksheet (sort_tsmp_inputs)
+
+    2. get_run details table 
+    '''
+
+    result_files = sort_tsmp_inputs(ws_1)
+    sample_1 = result_files['samples'][0]
+    sample_1_xls = pd.ExcelFile(sample_1)
+    hybqc = pd.read_excel(sample_1_xls, 'Hyb-QC')
+
+    thirty_only = hybqc['PCT_TARGET_BASES_30X']
+    all_cov = hybqc[['PCT_TARGET_BASES_20X', 'PCT_TARGET_BASES_30X', 'PCT_TARGET_BASES_40X']]
+
+    print(all_cov)
+
+
+def sort_tsmp_inputs(ws_1):
+    '''
+    a function to a dictionary of inputs: neg_ws_result, all_result_paths,
+    vcf_path, 
+
+    {
+    worksheet_num: {
+    negative: '/path/to/neg',
+    samples: ['/path/to/sample_1', '/path/to/samp_2'....], 
+    cmd_log_file: 'path_to_log'
+    vcf_directory: '/path/to/vcfs',
+    sry_excel: '/path/to/sry'
+    }}
+    
+    for the majority of checks use sample_1 one, for FLT3 check use whole list
+
+    TODO: write this function!
+    '''
+
+    tsmp_inp =     {
+    'negative': '/home/degan/mock_ngs_out/mock_input_data/TSMP/TSMP_000001_v0.5.3/excel_reports_TSMP_000001/000001-1-D00-00000-NEG_S1.v0.5.3-results.xlsx',
+    'samples': ['/home/degan/mock_ngs_out/mock_input_data/TSMP/TSMP_000001_v0.5.3/excel_reports_TSMP_000001/000001-2-D20-00001-JD_S2.v0.5.3-results.xlsx'], 
+    'cmd_log_file': '/home/degan/mock_ngs_out/mock_input_data/TSMP/TSMP_000001_v0.5.3/excel_reports_TSMP_000001/000001.commandline_usage_logfile',
+    'vcf_directory': '/home/degan/mock_ngs_out/mock_input_data/TSMP/TSMP_000001_v0.5.3/excel_reports_TSMP_000001/vcfs_TSMP_000001',
+    'sry_excel': '/home/degan/mock_ngs_out/mock_input_data/TSMP/TSMP_000001_v0.5.3/excel_reports_TSMP_000001/000001-SRY.xlsx',
+    'merged_variant_xls':'/home/degan/mock_ngs_out/mock_input_data/TSMP/TSMP_000001_v0.5.3/excel_reports_TSMP_000001/TSMP_000001.merged-variants.xlsx'
+    }
+    
+    return tsmp_inp
+
+# Generic regex used to extact ws_num etc
+# TODO replace TSHC section with variable name
+panel_regex = r'\/(\w{4,7})_(\d{6})_(v[\.]?\d\.\d\.\d)\/'
 
 ws_1 = args.ws_1
 ws_2 = args.ws_2
-tshc_main(ws_1, ws_2)
+sample_sheet = args.samplesheet
+
+# Assign panel and start workflow
+assign_panel(ws_1, ws_2, sample_sheet)
+
+
+#tshc_main(ws_1, ws_2)
