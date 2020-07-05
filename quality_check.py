@@ -456,14 +456,14 @@ def assign_panel(ws_1, ws_2, sample_sheet):
     panel = re.search(panel_regex, ws_1).group(1)
 
     if panel == 'TSMP':
-        tsmp_main(ws_1, sample_sheet)
+        tsmp_main(panel, ws_1, sample_sheet)
     elif panel == 'TSHC':
         tshc_main(ws_1, ws_2)
     else:
         print('Are you sure....Never heard of this panel')
 
 
-def tsmp_main(ws_1, sample_sheet):
+def tsmp_main(panel, ws_1, sample_sheet):
     '''
     A function to organise the TSMP function calls
 
@@ -474,18 +474,13 @@ def tsmp_main(ws_1, sample_sheet):
     2. get_run details table 
     '''
 
-    result_files = sort_tsmp_inputs(ws_1)
-    sample_1 = result_files['samples'][0]
-    sample_1_xls = pd.ExcelFile(sample_1)
-    hybqc = pd.read_excel(sample_1_xls, 'Hyb-QC')
+    result_files = sort_tsmp_inputs(panel, ws_1, sample_sheet)
+    # sample_1_xls = pd.ExcelFile(sample_1)
+    # hybqc = pd.read_excel(sample_1_xls, 'Hyb-QC')
 
-    thirty_only = hybqc['PCT_TARGET_BASES_30X']
-    all_cov = hybqc[['PCT_TARGET_BASES_20X', 'PCT_TARGET_BASES_30X', 'PCT_TARGET_BASES_40X']]
+    pass
 
-    print(all_cov)
-
-
-def sort_tsmp_inputs(ws_1):
+def sort_tsmp_inputs(panel, ws_1, sample_sheet):
     '''
     a function to a dictionary of inputs: neg_ws_result, all_result_paths,
     vcf_path, 
@@ -499,20 +494,51 @@ def sort_tsmp_inputs(ws_1):
     sry_excel: '/path/to/sry'
     }}
     
-    for the majority of checks use sample_1 one, for FLT3 check use whole list
-
-    TODO: write this function!
+    For the majority of checks use sample_1 one, for FLT3 check use whole list.
     '''
 
+    worksheet = re.search(panel_regex, ws_1).group(2)
+
+    if sample_sheet == None:
+        raise Exception("A samplesheet has not been provided... check the command")
+
+    tsmp_inputs = {}
+    pat_results_list = []
+
+    excel_base = ws_1 + f'excel_reports_{panel}_{worksheet}/'
+    results_list = os.listdir(excel_base)
+    excel_df = pd.DataFrame(results_list, columns=['sample_name'])    
+
+    # TODO check that SRY output is capitalised
+    # sort all results
+    neg_xls = excel_df[excel_df['sample_name'].str.contains('Neg|NEG')]
+    pat_results = excel_df[~excel_df['sample_name'].str.contains('Neg|NEG|-fastq-bam-check|merged-variants|SRY')]
+    sry_xls = excel_df[excel_df['sample_name'].str.contains('SRY')]
+    merged_xls = excel_df[excel_df['sample_name'].str.contains('merged-variants')]
+
+    # get abs path for each df
+    neg_xls = os.path.abspath(neg_xls['sample_name'].squeeze())
+    pat_results = pat_results.squeeze().to_list()
+    for res in pat_results:
+        pat_results_list.append(os.path.abspath(res))
+    cmd_log_file = os.path.abspath(ws_1) + f'{worksheet}.commandline_usage_logfile'
+    vcf_dir = os.path.abspath(ws_1) + f'/vcfs_{panel}_{worksheet}/'
+    if sry_xls.empty == True:
+        sry_xls = None
+    else:
+        sry_xls = os.path.abspath(sry_xls.squeeze())
+    merged_xls = os.path.abspath(merged_xls.squeeze())
+
     tsmp_inp =     {
-    'negative': '/home/degan/mock_ngs_out/mock_input_data/TSMP/TSMP_000001_v0.5.3/excel_reports_TSMP_000001/000001-1-D00-00000-NEG_S1.v0.5.3-results.xlsx',
-    'samples': ['/home/degan/mock_ngs_out/mock_input_data/TSMP/TSMP_000001_v0.5.3/excel_reports_TSMP_000001/000001-2-D20-00001-JD_S2.v0.5.3-results.xlsx'], 
-    'cmd_log_file': '/home/degan/mock_ngs_out/mock_input_data/TSMP/TSMP_000001_v0.5.3/excel_reports_TSMP_000001/000001.commandline_usage_logfile',
-    'vcf_directory': '/home/degan/mock_ngs_out/mock_input_data/TSMP/TSMP_000001_v0.5.3/excel_reports_TSMP_000001/vcfs_TSMP_000001',
-    'sry_excel': '/home/degan/mock_ngs_out/mock_input_data/TSMP/TSMP_000001_v0.5.3/excel_reports_TSMP_000001/000001-SRY.xlsx',
-    'merged_variant_xls':'/home/degan/mock_ngs_out/mock_input_data/TSMP/TSMP_000001_v0.5.3/excel_reports_TSMP_000001/TSMP_000001.merged-variants.xlsx'
+    'negative': neg_xls,
+    'pat_results': pat_results_list, 
+    'cmd_log_file': cmd_log_file,
+    'vcf_directory': vcf_dir,
+    'sry_excel': sry_xls,
+    'merged_variant_xls': merged_xls,
+    'sample_sheet': sample_sheet
     }
-    
+
     return tsmp_inp
 
 # Generic regex used to extact ws_num etc
