@@ -457,30 +457,33 @@ def assign_panel(ws_1, ws_2, sample_sheet):
     panel = re.search(panel_regex, ws_1).group(1)
 
     if panel == 'TSMP':
-        tsmp_main(panel, ws_1, sample_sheet)
+        ho_main(panel, ws_1, sample_sheet)
     elif panel == 'TSHC':
         tshc_main(ws_1, ws_2)
     else:
         print('Are you sure....Never heard of this panel')
 
 
-def tsmp_main(panel, ws_1, sample_sheet):
+def ho_main(panel, ws_1, sample_sheet):
     '''
-    A function to organise the TSMP function calls
+    A function to organise the HO function calls
 
     The following functions must be run to produce the quality check report:
 
     1. Assign varaiables for samples in worksheet (sort_ho_inputs)
-
     2. get_run details table 
-    '''
+    3. Run 9 independent checks and create output df
 
-    ho_check_result_df = pd.DataFrame(columns=[ 'Worksheet','Check', 'Description','Result', 'Info'])
+    '''
 
     result_files = sort_ho_inputs(panel, ws_1, sample_sheet)
     run_details_df = run_details_ho(result_files)
+
+    #create df and add results for each check
+    ho_check_result_df = pd.DataFrame(columns=[ 'Worksheet','Check', 'Description','Result', 'Info'])    
     ho_check_result_df = ho_vcf_check(result_files, ho_check_result_df)
-    ho_check_result_df = ho_neg_exon_check(result_files, ho_check_result_df)
+    ho_check_result_df = ho_neg_checks(result_files, ho_check_result_df)
+
 
     print(ho_check_result_df)
 
@@ -646,7 +649,7 @@ def convert_unit(size_in_bytes, unit='KB'):
    else:
         return str(size_in_bytes) + ' B'
 
-def ho_neg_exon_check(ho_inp, ho_check_result_df):
+def ho_neg_checks(ho_inp, ho_check_result_df):
 
 
     panel = ho_inp['panel'] 
@@ -663,7 +666,7 @@ def ho_neg_exon_check(ho_inp, ho_check_result_df):
     num_exons = neg_exon_df['Max'].count()
 
     worksheet = ho_inp['worksheet']
-    neg_exon_check = 'Neg exon check'
+    neg_exon_check = 'Negative exon check'
     neg_exon_check_des = f'There are {exon_target} exons present in the negative sample.'
     info = None
 
@@ -674,12 +677,43 @@ def ho_neg_exon_check(ho_inp, ho_check_result_df):
     else:
         neg_exon_res = 'FAIL'
 
+    max_num_exons = neg_exon_df['Max'].max()
+    neg_depth_check = 'Negative exon depth check'
+    neg_depth_check_des = f'The maximum depth of each exon of the negative sample \
+    does not exceed 30 reads.'
+
+    if max_num_exons > 30:
+        neg_depth_res = 'FAIL'
+    else:
+        neg_depth_res = 'PASS'
+
+    neg_zero_check = 'Negative exon depth check > 0'
+    neg_zero_check_des = f'The maximum number of reads in each exon of the negative \
+    sample is greater than 0.'    
+
+    if max_num_exons > 0:
+        neg_zero_res = 'PASS'
+    else:
+        neg_zero_res = 'FAIL'
+
     ho_check_result_df = ho_check_result_df.append({'Check': neg_exon_check,
                                             'Description': neg_exon_check_des,
                                             'Result': neg_exon_res,
                                             'Worksheet': worksheet,
                                             'Info': info}, ignore_index=True)
-    
+   
+    ho_check_result_df = ho_check_result_df.append({'Check': neg_depth_check,
+                                            'Description': neg_depth_check_des,
+                                            'Result': neg_depth_res,
+                                            'Worksheet': worksheet,
+                                            'Info': info}, ignore_index=True)
+
+    ho_check_result_df = ho_check_result_df.append({'Check': neg_zero_check,
+                                            'Description': neg_zero_check_des,
+                                            'Result': neg_zero_res,
+                                            'Worksheet': worksheet,
+                                            'Info': info}, ignore_index=True)
+
     return ho_check_result_df
 
 
