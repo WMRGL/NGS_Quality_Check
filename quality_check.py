@@ -484,6 +484,7 @@ def ho_main(panel, ws_1, sample_sheet):
     ho_check_result_df = ho_vcf_check(result_files, ho_check_result_df)
     ho_check_result_df = ho_neg_checks(result_files, ho_check_result_df)
     ho_check_result_df = verifybamid_check(result_files, ho_check_result_df)
+    ho_check_result_df = ho_sry_check(result_files, ho_check_result_df)
 
     print(ho_check_result_df)
 
@@ -493,7 +494,7 @@ def ho_main(panel, ws_1, sample_sheet):
     # sample_1_xls = pd.ExcelFile(sample_1)
     # hybqc = pd.read_excel(sample_1_xls, 'Hyb-QC')
 
-    pass
+  
 
 def sort_ho_inputs(panel, ws_1, sample_sheet):
     '''
@@ -682,8 +683,7 @@ def ho_neg_checks(ho_inp, ho_check_result_df):
 
     max_num_exons = neg_exon_df['Max'].max()
     neg_depth_check = 'Negative exon depth check'
-    neg_depth_check_des = f'The maximum depth of each exon of the negative sample \
-    does not exceed 30 reads.'
+    neg_depth_check_des = f'The maximum depth of each exon of the negative sample does not exceed 30 reads.'
 
     if max_num_exons > 30:
         neg_depth_res = 'FAIL'
@@ -691,8 +691,7 @@ def ho_neg_checks(ho_inp, ho_check_result_df):
         neg_depth_res = 'PASS'
 
     neg_zero_check = 'Negative exon depth check > 0'
-    neg_zero_check_des = f'The maximum number of reads in each exon of the negative \
-    sample is greater than 0.'    
+    neg_zero_check_des = f'The maximum number of reads in each exon of the negative sample is greater than 0.'    
 
     if max_num_exons > 0:
         neg_zero_res = 'PASS'
@@ -757,6 +756,32 @@ def verifybamid_check(ho_inp, ho_check_result_df):
                                             'Result': verifybamid_res,
                                             'Worksheet': worksheet,
                                             'Info': info}, ignore_index=True)
+
+    return ho_check_result_df
+
+def ho_sry_check(ho_inp, ho_check_result_df):
+    '''
+    Check for the presence of an SRY output xls.
+    '''
+
+    panel = ho_inp['panel']
+    sry_xls = ho_inp['sry_excel']
+    worksheet = ho_inp['worksheet']
+
+    sry_check = 'SRY check'
+    sry_check_des = f'SRY Excel spreadsheet has been produced.'
+    info = None
+
+    if sry_xls == None:
+        sry_check_res = 'FAIL'
+    else:
+        sry_check_res = 'PASS'
+
+    ho_check_result_df = ho_check_result_df.append({'Check': sry_check,
+                                            'Description': sry_check_des,
+                                            'Result': sry_check_res,
+                                            'Worksheet': worksheet,
+                                            'Info': info}, ignore_index=True) 
 
     return ho_check_result_df
 
