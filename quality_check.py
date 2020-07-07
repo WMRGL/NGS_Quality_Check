@@ -4,7 +4,8 @@ import argparse
 import sys
 import re
 import numpy as np
-
+import glob
+import enum
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-ws_1', action='store', required=True, help='Path to worksheet 1 output files include TSHC_<ws>_version dir')
@@ -469,22 +470,29 @@ def tsmp_main(panel, ws_1, sample_sheet):
 
     The following functions must be run to produce the quality check report:
 
-    1. Assign varaiables for samples in worksheet (sort_tsmp_inputs)
+    1. Assign varaiables for samples in worksheet (sort_ho_inputs)
 
     2. get_run details table 
     '''
 
-    result_files = sort_tsmp_inputs(panel, ws_1, sample_sheet)
-    run_details_df = run_details_ho(result_files)
+    ho_check_result_df = pd.DataFrame(columns=[ 'Worksheet','Check', 'Description','Result', 'Info'])
 
-    print(result_files)
-    print(run_details_df)
+    result_files = sort_ho_inputs(panel, ws_1, sample_sheet)
+    run_details_df = run_details_ho(result_files)
+    ho_check_result_df = ho_vcf_check(result_files, ho_check_result_df)
+    ho_check_result_df = ho_neg_exon_check(result_files, ho_check_result_df)
+
+    print(ho_check_result_df)
+
+    # to access Max value
+    #print(ho_vcf_check_df['Info'][0]['Max'])
+
     # sample_1_xls = pd.ExcelFile(sample_1)
     # hybqc = pd.read_excel(sample_1_xls, 'Hyb-QC')
 
     pass
 
-def sort_tsmp_inputs(panel, ws_1, sample_sheet):
+def sort_ho_inputs(panel, ws_1, sample_sheet):
     '''
     a function to a dictionary of inputs: neg_ws_result, all_result_paths,
     vcf_path, 
@@ -506,7 +514,7 @@ def sort_tsmp_inputs(panel, ws_1, sample_sheet):
     if sample_sheet == None:
         raise Exception("A samplesheet has not been provided... check the command")
 
-    tsmp_inputs = {}
+
     pat_results_list = []
 
     excel_base = ws_1 + f'excel_reports_{panel}_{worksheet}/'
@@ -521,7 +529,7 @@ def sort_tsmp_inputs(panel, ws_1, sample_sheet):
     merged_xls = excel_df[excel_df['sample_name'].str.contains('merged-variants')]
 
     # get abs path for each df
-    neg_xls = os.path.abspath(neg_xls['sample_name'].squeeze())
+    neg_xls = f'{excel_base}'+ neg_xls['sample_name'].squeeze()
     pat_results = pat_results.squeeze().to_list()
     for res in pat_results:
         pat_results_list.append(os.path.abspath(res))
@@ -533,7 +541,7 @@ def sort_tsmp_inputs(panel, ws_1, sample_sheet):
         sry_xls = os.path.abspath(sry_xls.squeeze())
     merged_xls = os.path.abspath(merged_xls.squeeze())
 
-    tsmp_inp =     {
+    ho_inp =     {
     'panel': panel,
     'worksheet': worksheet,
     'negative': neg_xls,
@@ -545,16 +553,16 @@ def sort_tsmp_inputs(panel, ws_1, sample_sheet):
     'sample_sheet': sample_sheet
     }
 
-    return tsmp_inp
+    return ho_inp
 
-def run_details_ho(tsmp_inp):
+def run_details_ho(ho_inp):
     '''
     Retrieve run details information from command line log file
     '''
 
-    panel = tsmp_inp['panel']
-    cmd = tsmp_inp['cmd_log_file']
-    worksheet = tsmp_inp['worksheet']
+    panel = ho_inp['panel']
+    cmd = ho_inp['cmd_log_file']
+    worksheet = ho_inp['worksheet']
     with open(cmd, 'r') as file:
         cmd_text = file.read()
 
@@ -573,14 +581,107 @@ def run_details_ho(tsmp_inp):
 
     return ho_details_df
 
-def ho_vcf_check(tsmp_inp):
+def ho_vcf_check(ho_inp, ho_check_result_df):
     '''
     A check to determine if the number of VCFs generated
     is 2x the number of samples in the sample sheet
+
+    TODO check that the index value of 20 does not change between samplesheets!
     '''
-    sample_sheet_xls = pd.ExcelFile(tsmp_inp['sample_sheet'])
-    sample_sheet_df = pd.read_excel(sample_sheet_xls, 'SampleSheet')
-    print(sample_sheet_df)
+    sample_sheet_path = ho_inp['sample_sheet']
+    vcf_dir_path = ho_inp['vcf_directory']
+    sample_sheet_xls = pd.read_csv(sample_sheet_path)
+    # split sample sheet into section containing sample names
+    column_list = sample_sheet_xls.iloc[19:20].squeeze().to_list()
+    sample_df = pd.DataFrame(sample_sheet_xls.iloc[20:])
+    sample_df.columns = column_list
+
+    num_sample = sample_df['Sample_ID'].count()
+    num_exp = num_sample * 2
+
+    vcf_search = vcf_dir_path + '*.vcf'
+    vcf_files = glob.glob(vcf_search)
+
+    file_size = []
+    for file in vcf_files:
+        size = os.stat(file).st_size
+        file_size.append(size)
+
+    min_file = convert_unit(min(file_size))
+    max_file = convert_unit(max(file_size))
+    file_size_df = pd.DataFrame(columns=[ 'Min','Max'])
+    file_size_df = file_size_df.append({
+        'Min': min_file,
+        'Max': max_file
+        }, ignore_index=True)
+
+    worksheet = ho_inp['worksheet']
+    vcf_check = 'VCF count check'
+    vcf_check_des = 'The number of VCFs produced must be 2 times the number of \
+    samples present on the samplesheet'
+
+    if num_exp != len(vcf_files):
+        vcf_check_res = 'FAIL'
+    else:
+        vcf_check_res = 'PASS'
+
+    ho_check_result_df = ho_check_result_df.append({'Check': vcf_check,
+                                            'Description': vcf_check_des,
+                                            'Result': vcf_check_res,
+                                            'Worksheet': worksheet,
+                                            'Info': file_size_df}, ignore_index=True)
+
+    return ho_check_result_df
+
+
+def convert_unit(size_in_bytes, unit='KB'):
+   ''' Convert the size from bytes to other units like KB, MB or GB'''
+
+   if unit == 'KB':
+       return str(int(size_in_bytes/1024)) + ' KB'
+   elif unit == 'MB':
+       return str(int(size_in_bytes/(1024*1024))) + ' MB' 
+   elif unit == 'GB':
+       return str(int(size_in_bytes/(1024*1024*1024))) + ' GB'
+   else:
+        return str(size_in_bytes) + ' B'
+
+def ho_neg_exon_check(ho_inp, ho_check_result_df):
+
+
+    panel = ho_inp['panel'] 
+    if panel == 'TSMP':
+        exon_target = 491
+    elif panel == 'CLL':
+        exon_target = 148
+    else:
+        raise Exception('This panel has not been added to this script.')
+
+    neg_xls_path = ho_inp['negative']
+    xls = pd.ExcelFile(ho_inp['negative'])
+    neg_exon_df = pd.read_excel(xls, 'Coverage-exon')
+    num_exons = neg_exon_df['Max'].count()
+
+    worksheet = ho_inp['worksheet']
+    neg_exon_check = 'Neg exon check'
+    neg_exon_check_des = f'There are {exon_target} exons present in the negative sample.'
+    info = None
+
+    if panel == 'TSMP' and num_exons == 491:
+        neg_exon_res = 'PASS'
+    elif panel == 'CLL' and num_exons == 148:
+        neg_exon_res = 'PASS'
+    else:
+        neg_exon_res = 'FAIL'
+
+    ho_check_result_df = ho_check_result_df.append({'Check': neg_exon_check,
+                                            'Description': neg_exon_check_des,
+                                            'Result': neg_exon_res,
+                                            'Worksheet': worksheet,
+                                            'Info': info}, ignore_index=True)
+    
+    return ho_check_result_df
+
 
 # Generic regex used to extact ws_num etc
 # TODO replace TSHC section with variable name
