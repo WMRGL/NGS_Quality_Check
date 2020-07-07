@@ -483,7 +483,7 @@ def ho_main(panel, ws_1, sample_sheet):
     ho_check_result_df = pd.DataFrame(columns=[ 'Worksheet','Check', 'Description','Result', 'Info'])    
     ho_check_result_df = ho_vcf_check(result_files, ho_check_result_df)
     ho_check_result_df = ho_neg_checks(result_files, ho_check_result_df)
-
+    ho_check_result_df = verifybamid_check(result_files, ho_check_result_df)
 
     print(ho_check_result_df)
 
@@ -497,18 +497,10 @@ def ho_main(panel, ws_1, sample_sheet):
 
 def sort_ho_inputs(panel, ws_1, sample_sheet):
     '''
-    a function to a dictionary of inputs: neg_ws_result, all_result_paths,
-    vcf_path, 
+    a function to a dictionary of inputs
 
-    {
-    worksheet_num: {
-    negative: '/path/to/neg',
-    samples: ['/path/to/sample_1', '/path/to/samp_2'....], 
-    cmd_log_file: 'path_to_log'
-    vcf_directory: '/path/to/vcfs',
-    sry_excel: '/path/to/sry'
-    }}
-    
+    TODO- handle ~lock xls if samples open
+
     For the majority of checks use sample_1 one, for FLT3 check use whole list.
     '''
 
@@ -535,7 +527,8 @@ def sort_ho_inputs(panel, ws_1, sample_sheet):
     neg_xls = f'{excel_base}'+ neg_xls['sample_name'].squeeze()
     pat_results = pat_results.squeeze().to_list()
     for res in pat_results:
-        pat_results_list.append(os.path.abspath(res))
+        res_path = f'{excel_base}' + res
+        pat_results_list.append(res_path)
     cmd_log_file = os.path.abspath(ws_1) + f'/{worksheet}.commandline_usage_logfile'
     vcf_dir = os.path.abspath(ws_1) + f'/vcfs_{panel}_{worksheet}/'
     if sry_xls.empty == True:
@@ -638,19 +631,28 @@ def ho_vcf_check(ho_inp, ho_check_result_df):
 
 
 def convert_unit(size_in_bytes, unit='KB'):
-   ''' Convert the size from bytes to other units like KB, MB or GB'''
+    '''
+    A function to convert size of VCFs from bytes to human readable format
+    '''
 
-   if unit == 'KB':
+    if unit == 'KB':
        return str(int(size_in_bytes/1024)) + ' KB'
-   elif unit == 'MB':
+    elif unit == 'MB':
        return str(int(size_in_bytes/(1024*1024))) + ' MB' 
-   elif unit == 'GB':
+    elif unit == 'GB':
        return str(int(size_in_bytes/(1024*1024*1024))) + ' GB'
-   else:
+    else:
         return str(size_in_bytes) + ' B'
 
 def ho_neg_checks(ho_inp, ho_check_result_df):
+    '''
+    Completes 3 checks on the negative excel file: 
+    1) Number of exons present in the negative excel file (coverage-exon tab)
+    2) If any exon in the negative sample has a depth > 30
+    3) If the maximum depth in the negative sample == 0
 
+    A pass/fail criteria is applied and the results are added to the ho_check_results_df
+    '''
 
     panel = ho_inp['panel'] 
     if panel == 'TSMP':
@@ -670,6 +672,7 @@ def ho_neg_checks(ho_inp, ho_check_result_df):
     neg_exon_check_des = f'There are {exon_target} exons present in the negative sample.'
     info = None
 
+    # Number of exons present depends on panel
     if panel == 'TSMP' and num_exons == 491:
         neg_exon_res = 'PASS'
     elif panel == 'CLL' and num_exons == 148:
@@ -716,6 +719,46 @@ def ho_neg_checks(ho_inp, ho_check_result_df):
 
     return ho_check_result_df
 
+def verifybamid_check(ho_inp, ho_check_result_df):
+    '''
+    Checks the verifybamid tab to ensure samples do not exceed contamination thresholds:
+        CLL > 3%
+        MPN > 10%
+        TSMP > ?
+    TODO- Check the threshold for TSMP panel sample. For now the value is 3%. Is this correct?
+    '''
+
+    panel = ho_inp['panel']
+    
+    if panel == 'MPN':
+        threshold = 10.0
+    else:
+        threshold = 3.0
+
+    # pick the first sample results xls verifybamid common across samples 
+    xls_path = ho_inp['pat_results'][0]
+    xls = pd.ExcelFile(xls_path)
+    verifybamid_df = pd.read_excel(xls, 'VerifyBamId')
+
+    max_cont = verifybamid_df['%CONT'].max()
+
+    worksheet = ho_inp['worksheet']
+    verifybamid_check = 'VerifyBamId check'
+    verifybamid_check_des = f'Percentage contamination is below {int(threshold)}%'
+    info = None
+
+    if max_cont > threshold:
+        verifybamid_res = 'FAIL'
+    else:
+        verifybamid_res = 'PASS'
+
+    ho_check_result_df = ho_check_result_df.append({'Check': verifybamid_check,
+                                            'Description': verifybamid_check_des,
+                                            'Result': verifybamid_res,
+                                            'Worksheet': worksheet,
+                                            'Info': info}, ignore_index=True)
+
+    return ho_check_result_df
 
 # Generic regex used to extact ws_num etc
 # TODO replace TSHC section with variable name
