@@ -485,6 +485,7 @@ def ho_main(panel, ws_1, sample_sheet):
     ho_check_result_df = ho_neg_checks(result_files, ho_check_result_df)
     ho_check_result_df = verifybamid_check(result_files, ho_check_result_df)
     ho_check_result_df = ho_sry_check(result_files, ho_check_result_df)
+    ho_check_result_df = ho_flt3_check(result_files, ho_check_result_df)
 
     print(ho_check_result_df)
 
@@ -780,6 +781,35 @@ def ho_sry_check(ho_inp, ho_check_result_df):
     ho_check_result_df = ho_check_result_df.append({'Check': sry_check,
                                             'Description': sry_check_des,
                                             'Result': sry_check_res,
+                                            'Worksheet': worksheet,
+                                            'Info': info}, ignore_index=True) 
+
+    return ho_check_result_df
+
+def ho_flt3_check(ho_inp, ho_check_result_df):
+    '''
+    If any variants are present on FLT3 tab then the check will pass
+    '''
+    flt3_var_list = []
+    sample_list = ho_inp['pat_results']
+    for sample in sample_list:
+        xls = pd.ExcelFile(sample)
+        verifybamid_df = pd.read_excel(xls, 'FLT3')
+        flt3_var_list.append(verifybamid_df.shape[0])
+    
+    worksheet = ho_inp['worksheet']
+    flt3_check = 'FLT3 variant check'
+    flt3_check_des = f'FLT3 variants have called by Manta or Pindel for this worksheet.'
+    info = None
+
+    if max(flt3_var_list) > 0:
+        flt3_check_res = 'PASS'
+    else:
+        flt3_check_res = 'FAIL'
+
+    ho_check_result_df = ho_check_result_df.append({'Check': flt3_check,
+                                            'Description': flt3_check_des,
+                                            'Result': flt3_check_res,
                                             'Worksheet': worksheet,
                                             'Info': info}, ignore_index=True) 
 
