@@ -486,6 +486,7 @@ def ho_main(panel, ws_1, sample_sheet):
     ho_check_result_df = verifybamid_check(result_files, ho_check_result_df)
     ho_check_result_df = ho_sry_check(result_files, ho_check_result_df)
     ho_check_result_df = ho_flt3_check(result_files, ho_check_result_df)
+    ho_check_result_df = ho_coverage_check(result_files, ho_check_result_df)
 
     print(ho_check_result_df)
 
@@ -814,6 +815,76 @@ def ho_flt3_check(ho_inp, ho_check_result_df):
                                             'Info': info}, ignore_index=True) 
 
     return ho_check_result_df
+
+def ho_coverage_check(ho_inp, ho_check_result_df):
+    '''
+    Checks coverage is > 80% 300X (coverage-gene)
+    Checks coverage is > 80% 100X (coverage-exon)
+
+    TODO - check drop NA...
+    '''
+
+    sample_list = ho_inp['pat_results']
+
+    gene_fail_list = []
+    exon_fail_list = [] 
+    # coverage-gene tab    
+    for sample in sample_list:
+        xls = pd.ExcelFile(sample)
+        gene_cov_df = pd.read_excel(xls, 'Coverage-gene')
+        exon_cov_df = pd.read_excel(xls, 'Coverage-exon')
+
+        #Coverage-gene tab
+        if gene_cov_df['pct>300x'].min() < 80.0:
+            gene_fail_list.append(sample)
+
+        #Capture for 1.4.4 and 1.4.5 pull out Dnum?
+        #Take this out of the loop?
+        sample_name = sample
+        cov_gene_300x = gene_cov_df[['Gene','pct>300x']].dropna()
+        cov_exon_100x = exon_cov_df[['Gene', 'Exon', 'pct>100x']].dropna()
+
+        print(cov_exon_100x)
+
+        #Coverage-exon tab
+        if exon_cov_df['pct>100x'].min() < 100:
+            exon_fail_list.append(sample)
+
+    worksheet = ho_inp['worksheet']
+    cov_gene_check = 'Gene 300X check'
+    cov_gene_check_des = f'All samples in this worksheet have genes at >80% 300X.'
+    gene_info = None
+
+    #gene cov logic
+    if len(gene_fail_list) > 0:
+        cov_gene_check_res = 'FAIL'
+    else:
+        cov_gene_check_res = 'PASS'
+
+    cov_exon_check = 'Exon 100X check'
+    cov_exon_check_des = f'All samples in this worksheet have exon coverage at 100% 100X.'
+    exon_info = None
+
+    if len(exon_fail_list) > 0:
+        cov_exon_check_res = 'FAIL'
+    else:
+        cov_exon_check_res = 'PASS'
+
+    ho_check_result_df = ho_check_result_df.append({'Check': cov_gene_check,
+                                            'Description': cov_gene_check_des,
+                                            'Result': cov_gene_check_res,
+                                            'Worksheet': worksheet,
+                                            'Info': gene_info}, ignore_index=True) 
+
+    ho_check_result_df = ho_check_result_df.append({'Check': cov_exon_check,
+                                            'Description': cov_exon_check_des,
+                                            'Result': cov_exon_check_res,
+                                            'Worksheet': worksheet,
+                                            'Info': exon_info}, ignore_index=True) 
+
+
+    return ho_check_result_df
+
 
 # Generic regex used to extact ws_num etc
 # TODO replace TSHC section with variable name
