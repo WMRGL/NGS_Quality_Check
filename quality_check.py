@@ -573,6 +573,14 @@ def run_details_ho(tsmp_inp):
 
     return ho_details_df
 
+def ho_vcf_check(tsmp_inp):
+    '''
+    A check to determine if the number of VCFs generated
+    is 2x the number of samples in the sample sheet
+    '''
+    sample_sheet_xls = pd.ExcelFile(tsmp_inp['sample_sheet'])
+    sample_sheet_df = pd.read_excel(sample_sheet_xls, 'SampleSheet')
+    print(sample_sheet_df)
 
 # Generic regex used to extact ws_num etc
 # TODO replace TSHC section with variable name
