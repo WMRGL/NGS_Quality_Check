@@ -475,6 +475,10 @@ def tsmp_main(panel, ws_1, sample_sheet):
     '''
 
     result_files = sort_tsmp_inputs(panel, ws_1, sample_sheet)
+    run_details_df = run_details_ho(result_files)
+
+    print(result_files)
+    print(run_details_df)
     # sample_1_xls = pd.ExcelFile(sample_1)
     # hybqc = pd.read_excel(sample_1_xls, 'Hyb-QC')
 
@@ -521,7 +525,7 @@ def sort_tsmp_inputs(panel, ws_1, sample_sheet):
     pat_results = pat_results.squeeze().to_list()
     for res in pat_results:
         pat_results_list.append(os.path.abspath(res))
-    cmd_log_file = os.path.abspath(ws_1) + f'{worksheet}.commandline_usage_logfile'
+    cmd_log_file = os.path.abspath(ws_1) + f'/{worksheet}.commandline_usage_logfile'
     vcf_dir = os.path.abspath(ws_1) + f'/vcfs_{panel}_{worksheet}/'
     if sry_xls.empty == True:
         sry_xls = None
@@ -530,6 +534,8 @@ def sort_tsmp_inputs(panel, ws_1, sample_sheet):
     merged_xls = os.path.abspath(merged_xls.squeeze())
 
     tsmp_inp =     {
+    'panel': panel,
+    'worksheet': worksheet,
     'negative': neg_xls,
     'pat_results': pat_results_list, 
     'cmd_log_file': cmd_log_file,
@@ -540,6 +546,33 @@ def sort_tsmp_inputs(panel, ws_1, sample_sheet):
     }
 
     return tsmp_inp
+
+def run_details_ho(tsmp_inp):
+    '''
+    Retrieve run details information from command line log file
+    '''
+
+    panel = tsmp_inp['panel']
+    cmd = tsmp_inp['cmd_log_file']
+    worksheet = tsmp_inp['worksheet']
+    with open(cmd, 'r') as file:
+        cmd_text = file.read()
+
+    exp_term = r'-s\s\n\/network\/sequenced\/MiSeq_data\/Nextera_Rapid_Capture\/TruSight_Myeloid_Panel_v3\/(shire_worksheet_numbered|Validation)\/(?:200000-299999\/)?(?:300000-399999\/)?' + re.escape(worksheet) + r'\/(\d{6}_M\d{5}_\d{4}_\d{9}-\w{5})\/SampleSheet.csv'
+    pipe_term = r'Pipeline\scommand:\n\/opt\/scripts\/MiSeq-Universal-(v[\.]?\d\.\d\.\d)\/MiSeq-master-pipeline.py'
+    exp_name = re.search(exp_term, cmd_text).group(2)
+    pipe_version = re.search(pipe_term, cmd_text).group(1)
+
+    ho_run_details_df = pd.DataFrame(columns=['Worksheet', 'Panel', 'Pipeline version', 'Experiment name'])
+
+    ho_details_df = ho_run_details_df.append({'Worksheet': worksheet,
+                                            'Panel': panel,
+                                            'Pipeline version': pipe_version,
+                                            'Experiment name': exp_name
+                                            }, ignore_index=True)
+
+    return ho_details_df
+
 
 # Generic regex used to extact ws_num etc
 # TODO replace TSHC section with variable name
