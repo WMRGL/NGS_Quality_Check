@@ -6,6 +6,7 @@ import re
 import numpy as np
 import glob
 import enum
+from openpyxl import load_workbook, Workbook
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-ws_1', action='store', required=True, help='Path to worksheet 1 output files include TSHC_<ws>_version dir')
@@ -481,14 +482,16 @@ def ho_main(panel, ws_1, sample_sheet):
 
     #create df and add results for each check
     ho_check_result_df = pd.DataFrame(columns=[ 'Worksheet','Check', 'Description','Result', 'Info'])    
-    ho_check_result_df = ho_vcf_check(result_files, ho_check_result_df)
-    ho_check_result_df = ho_neg_checks(result_files, ho_check_result_df)
-    ho_check_result_df = verifybamid_check(result_files, ho_check_result_df)
-    ho_check_result_df = ho_sry_check(result_files, ho_check_result_df)
-    ho_check_result_df = ho_flt3_check(result_files, ho_check_result_df)
-    ho_check_result_df = ho_coverage_check(result_files, ho_check_result_df)
+    # ho_check_result_df = ho_vcf_check(result_files, ho_check_result_df)
+    # ho_check_result_df = ho_neg_checks(result_files, ho_check_result_df)
+    # ho_check_result_df = verifybamid_check(result_files, ho_check_result_df)
+    # ho_check_result_df = ho_sry_check(result_files, ho_check_result_df)
+    # ho_check_result_df = ho_flt3_check(result_files, ho_check_result_df)
+    ho_check_result_df, cov_df = ho_coverage_check(result_files, ho_check_result_df)
 
-    print(ho_check_result_df)
+    ho_neg_table_df, alt_var_df = ho_neg_summary_table(result_files)
+    # ho_merged_var_xls(result_files)
+    ho_summary_xls(cov_df, alt_var_df)
 
     # to access Max value
     #print(ho_vcf_check_df['Info'][0]['Max'])
@@ -538,7 +541,7 @@ def sort_ho_inputs(panel, ws_1, sample_sheet):
         sry_xls = None
     else:
         sry_xls = os.path.abspath(sry_xls.squeeze())
-    merged_xls = os.path.abspath(merged_xls.squeeze())
+    merged_xls = f'{excel_base}' + merged_xls['sample_name'].squeeze()
 
     ho_inp =     {
     'panel': panel,
@@ -684,6 +687,9 @@ def ho_neg_checks(ho_inp, ho_check_result_df):
         neg_exon_res = 'FAIL'
 
     max_num_exons = neg_exon_df['Max'].max()
+    max_row_exon = neg_exon_df.loc[neg_exon_df['Max'] == max_num_exons]
+    max_row_exon = max_row_exon[['Gene', 'Exon', 'Max']]
+
     neg_depth_check = 'Negative exon depth check'
     neg_depth_check_des = f'The maximum depth of each exon of the negative sample does not exceed 30 reads.'
 
@@ -710,7 +716,7 @@ def ho_neg_checks(ho_inp, ho_check_result_df):
                                             'Description': neg_depth_check_des,
                                             'Result': neg_depth_res,
                                             'Worksheet': worksheet,
-                                            'Info': info}, ignore_index=True)
+                                            'Info': max_row_exon}, ignore_index=True)
 
     ho_check_result_df = ho_check_result_df.append({'Check': neg_zero_check,
                                             'Description': neg_zero_check_des,
@@ -822,9 +828,25 @@ def ho_coverage_check(ho_inp, ho_check_result_df):
     Checks coverage is > 80% 100X (coverage-exon)
 
     TODO - check drop NA...
+
+    Collects coverage data to xls e.g.
+        cov_df{
+            gene: gene_df{
+                sample_name: Dnum,
+                gene_df: cov_gene_fail{
+                    Gene: gene_name, 
+                    pct>300x: value
+                }
+            }
+        }
+
     '''
 
     sample_list = ho_inp['pat_results']
+
+    cov_df = pd.DataFrame(columns=[ 'gene','exon'])
+    acu_gene_df = pd.DataFrame(columns=['sample_name','gene_df'])
+    acu_exon_df = pd.DataFrame(columns=['sample_name','exon_df'])
 
     gene_fail_list = []
     exon_fail_list = [] 
@@ -838,17 +860,34 @@ def ho_coverage_check(ho_inp, ho_check_result_df):
         if gene_cov_df['pct>300x'].min() < 80.0:
             gene_fail_list.append(sample)
 
-        #Capture for 1.4.4 and 1.4.5 pull out Dnum?
-        #Take this out of the loop?
-        sample_name = sample
-        cov_gene_300x = gene_cov_df[['Gene','pct>300x']].dropna()
-        cov_exon_100x = exon_cov_df[['Gene', 'Exon', 'pct>100x']].dropna()
-
-        print(cov_exon_100x)
-
         #Coverage-exon tab
         if exon_cov_df['pct>100x'].min() < 100:
             exon_fail_list.append(sample)
+
+        #Capture for 1.4.4 and 1.4.5 pull out Dnum?
+        #Take this out of the loop?
+        sample_name = re.search(r'D\d\d-\d{5}', sample)[0]
+        cov_gene_300x_df = gene_cov_df[['Gene','pct>300x']]
+        cov_exon_100x_df = exon_cov_df[['Gene', 'Exon', 'pct>100x']]
+        cov_gene_fail = cov_gene_300x_df.loc[cov_gene_300x_df['pct>300x'] < 80]
+        cov_exon_fail = cov_exon_100x_df.loc[cov_exon_100x_df['pct>100x'] < 100]
+
+        if cov_gene_fail.empty == False:
+            acu_gene_df = acu_gene_df.append({
+                'sample_name': sample_name,
+                'gene_df': cov_gene_fail
+                }, ignore_index=True)
+
+        if cov_exon_fail.empty == False:
+            acu_exon_df = acu_exon_df.append({
+                'sample_name': sample_name,
+                'exon_df': cov_exon_fail
+                }, ignore_index=True)
+
+    cov_df = cov_df.append({
+        'gene': acu_gene_df,
+        'exon': acu_exon_df
+        }, ignore_index=True)
 
     worksheet = ho_inp['worksheet']
     cov_gene_check = 'Gene 300X check'
@@ -883,7 +922,108 @@ def ho_coverage_check(ho_inp, ho_check_result_df):
                                             'Info': exon_info}, ignore_index=True) 
 
 
-    return ho_check_result_df
+    return [ho_check_result_df, cov_df]
+
+def ho_neg_summary_table(ho_inp):
+    '''
+    A summary table to display information required for the negative sample
+    This function also captures information to be added to a separate xls
+    '''
+
+    worksheet = ho_inp['worksheet']
+    panel = ho_inp['panel']
+    ho_neg_table_df = pd.DataFrame(columns=['Worksheet', 'Panel', 'Singletons', 'ALT reads', 'Sensitivity'])
+
+    xls = pd.ExcelFile(ho_inp['negative'])
+    variants_all_df = pd.read_excel(xls, 'Variants-all-data')
+
+    #singleton summary
+    singleton = variants_all_df[variants_all_df['FILTER'].str.contains('singleton')].shape[0]
+    num_var = variants_all_df.shape[0]
+    singleton_res = f'{singleton}/{num_var} singletons'
+
+    alt_var_df = variants_all_df[variants_all_df['Alleles'].str.contains(r'\d\d?,\d\d')]
+    alt_var = alt_var_df.shape[0]
+    alt_var_res = f'{alt_var} calls >= 10 alt reads'
+
+    # TODO this is duplicated from Neg check
+    neg_xls_path = ho_inp['negative']
+    neg_xls = pd.ExcelFile(ho_inp['negative'])
+    neg_exon_df = pd.read_excel(neg_xls, 'Coverage-exon')
+    max_num_exons = neg_exon_df['Max'].max()
+
+    #Calculate adjusted sensitivity required
+    sens_cov = 200
+    neg_sens = max_num_exons + sens_cov
+    sens_cal = 10 / neg_sens * 100
+    sens_cal_res = str(round(sens_cal, 2)) + '%'
+
+
+    ho_neg_table_df = ho_neg_table_df.append({'Worksheet': worksheet,
+                                            'Panel': panel,
+                                            'Singletons': singleton_res,
+                                            'ALT reads': alt_var_res,
+                                            'Sensitivity': sens_cal_res
+                                            }, ignore_index=True) 
+
+
+
+    return [ho_neg_table_df, alt_var_df]
+
+def ho_merged_var_xls(ho_inp):
+    '''
+    Create merged variant xls
+    '''
+    xls = pd.ExcelFile(ho_inp['merged_variant_xls'])
+    merged_df = pd.read_excel(xls, 'Variants-all-data')
+
+    #singleton = variants_all_df[variants_all_df['FILTER'].str.contains('singleton')].shape[0]
+    merged_vars_df = merged_df[~merged_df['SAMPLE'].str.contains('NEG|neg')]
+    merged_ab_df = merged_vars_df['AB']
+    mean_ab = merged_ab_df.mean()
+    stdev_ab = merged_ab_df.std()
+    plus_two_std = mean_ab + (2*stdev_ab)
+    minus_two_std = mean_ab - (2*stdev_ab)
+
+    panel = ho_inp['panel']
+    worksheet = ho_inp['worksheet']
+    excel_name = f'{panel}_{worksheet}'
+    #write to excel
+    xls_write = os.getcwd() + f'/{excel_name}.merged-variants.xlsx'
+    merged_vars_df.to_excel(xls_write, sheet_name='Variants-all-data')    
+
+    wb = load_workbook(filename=xls_write)
+    merged_sheet = wb.get_sheet_by_name('Variants-all-data')
+    merged_sheet.insert_rows(1,4)
+    merged_sheet.cell(row=1, column=15).value = mean_ab
+    merged_sheet.cell(row=2, column=15).value = stdev_ab
+    merged_sheet.cell(row=3, column=15).value = plus_two_std
+    merged_sheet.cell(row=4, column=15).value = minus_two_std
+    wb.save(xls_write)
+
+def ho_summary_xls(cov_df, alt_df):
+    '''
+    Create workbook with 3 sheets >10 ALT, gene_cov, exon_cov
+    '''
+
+    # Create a Pandas Excel writer using XlsxWriter as the engine.
+    filename = 'test_output_script'
+    writer = pd.ExcelWriter(f'{filename}.xlsx', engine='xlsxwriter')
+
+    # Write each dataframe to a different worksheet.
+    alt_df.to_excel(writer, sheet_name='>10_ALT_variants', index=False)
+    cov_df['gene'][0].to_excel(writer, sheet_name='Failed_gene_cov', index=False)
+    cov_df['exon'][0].to_excel(writer, sheet_name='Failed_exons_cov', index=False)
+
+    # Close the Pandas Excel writer and output the Excel file.
+    writer.save()
+        
+    # filename = "summary_out.xlsx"
+    # wb = Workbook()
+    # wb.create_sheet('>10_ALT_variants', 0)
+    # wb.create_sheet('Failed_genes_cov', 1)
+    # wb.create_sheet('Failed_exons_cov', 2)
+    # wb.save(filename)
 
 
 # Generic regex used to extact ws_num etc
