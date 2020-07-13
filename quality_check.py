@@ -7,6 +7,7 @@ import numpy as np
 import glob
 import enum
 from openpyxl import load_workbook, Workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-ws_1', action='store', required=True, help='Path to worksheet 1 output files include TSHC_<ws>_version dir')
@@ -482,16 +483,18 @@ def ho_main(panel, ws_1, sample_sheet):
 
     #create df and add results for each check
     ho_check_result_df = pd.DataFrame(columns=[ 'Worksheet','Check', 'Description','Result', 'Info'])    
-    # ho_check_result_df = ho_vcf_check(result_files, ho_check_result_df)
-    # ho_check_result_df = ho_neg_checks(result_files, ho_check_result_df)
-    # ho_check_result_df = verifybamid_check(result_files, ho_check_result_df)
-    # ho_check_result_df = ho_sry_check(result_files, ho_check_result_df)
-    # ho_check_result_df = ho_flt3_check(result_files, ho_check_result_df)
-    ho_check_result_df, cov_df = ho_coverage_check(result_files, ho_check_result_df)
-
+    ho_check_result_df = ho_vcf_check(result_files, ho_check_result_df)
+    ho_check_result_df = ho_neg_checks(result_files, ho_check_result_df)
+    ho_check_result_df = verifybamid_check(result_files, ho_check_result_df)
+    ho_check_result_df = ho_sry_check(result_files, ho_check_result_df)
+    ho_check_result_df = ho_flt3_check(result_files, ho_check_result_df)
+    ho_check_result_df, exon_dict, gene_dict = ho_coverage_check(result_files, ho_check_result_df)
     ho_neg_table_df, alt_var_df = ho_neg_summary_table(result_files)
+
+    ho_generate_html_output(run_details_df, ho_check_result_df, ho_neg_table_df)
+
     # ho_merged_var_xls(result_files)
-    ho_summary_xls(cov_df, alt_var_df)
+    ho_summary_xls(exon_dict, gene_dict, alt_var_df)
 
     # to access Max value
     #print(ho_vcf_check_df['Info'][0]['Max'])
@@ -827,26 +830,22 @@ def ho_coverage_check(ho_inp, ho_check_result_df):
     Checks coverage is > 80% 300X (coverage-gene)
     Checks coverage is > 80% 100X (coverage-exon)
 
-    TODO - check drop NA...
-
-    Collects coverage data to xls e.g.
-        cov_df{
-            gene: gene_df{
-                sample_name: Dnum,
-                gene_df: cov_gene_fail{
-                    Gene: gene_name, 
-                    pct>300x: value
-                }
-            }
-        }
-
+    Collect exon and gene fails for excel spreadsheet.
+    data stored in a dictionary:
+        exon failed dict:
+        {dnum: '<gene>,<exon_num>,<pct_cov>'}
+        gene failed dict:
+        {dnum: '<gene><pct_cov'}
     '''
 
     sample_list = ho_inp['pat_results']
 
-    cov_df = pd.DataFrame(columns=[ 'gene','exon'])
+    cov_df = pd.DataFrame(columns=[ 'gene_df','exon_df'])
     acu_gene_df = pd.DataFrame(columns=['sample_name','gene_df'])
     acu_exon_df = pd.DataFrame(columns=['sample_name','exon_df'])
+
+    exon_dict = {}
+    gene_dict = {}
 
     gene_fail_list = []
     exon_fail_list = [] 
@@ -872,22 +871,16 @@ def ho_coverage_check(ho_inp, ho_check_result_df):
         cov_gene_fail = cov_gene_300x_df.loc[cov_gene_300x_df['pct>300x'] < 80]
         cov_exon_fail = cov_exon_100x_df.loc[cov_exon_100x_df['pct>100x'] < 100]
 
-        if cov_gene_fail.empty == False:
-            acu_gene_df = acu_gene_df.append({
-                'sample_name': sample_name,
-                'gene_df': cov_gene_fail
-                }, ignore_index=True)
+        exon_dets = cov_exon_fail.to_csv(index=False, header=None)
+        gene_dets = cov_gene_fail.to_csv(index=False, header=None)
 
-        if cov_exon_fail.empty == False:
-            acu_exon_df = acu_exon_df.append({
-                'sample_name': sample_name,
-                'exon_df': cov_exon_fail
-                }, ignore_index=True)
-
-    cov_df = cov_df.append({
-        'gene': acu_gene_df,
-        'exon': acu_exon_df
-        }, ignore_index=True)
+        # only add to dict if the failed exon/genes are pres
+        if len(exon_dets) != 0:
+            exon_dets = exon_dets.strip()
+            exon_dict[sample_name] = exon_dets
+        if len(gene_dets) != 0:
+            gene_dets = gene_dets.strip()
+            gene_dict[sample_name] = gene_dets
 
     worksheet = ho_inp['worksheet']
     cov_gene_check = 'Gene 300X check'
@@ -922,7 +915,7 @@ def ho_coverage_check(ho_inp, ho_check_result_df):
                                             'Info': exon_info}, ignore_index=True) 
 
 
-    return [ho_check_result_df, cov_df]
+    return [ho_check_result_df, exon_dict, gene_dict]
 
 def ho_neg_summary_table(ho_inp):
     '''
@@ -1001,22 +994,184 @@ def ho_merged_var_xls(ho_inp):
     merged_sheet.cell(row=4, column=15).value = minus_two_std
     wb.save(xls_write)
 
-def ho_summary_xls(cov_df, alt_df):
+def ho_summary_xls(exon_dict, gene_dict, alt_df):
     '''
     Create workbook with 3 sheets >10 ALT, gene_cov, exon_cov
+    
+    TODO write function for xls generation... code duplicated
     '''
+
+    # create the workbook with 2 tabs
+    wb = Workbook()
+    failed_exon_ws = wb.active
+    failed_exon_ws.title = 'Failed Exons'
+    failed_gene_ws = wb.create_sheet('Failed genes')
+    alt_ws = wb.create_sheet('ALT reads >10')
+    exon_header_list = ['Sample', 'Gene', 'Exon','PCT<100x']
+    gene_header_list = ['Sample', 'Gene','PCT<300X']
+    num_exon_add = len(exon_dict)
+    row_num = 1
+    skip_list = []
+
+    # Parsing exon_dict dnum: '<gene>,<exon>,<pct>'
+    for k,v in exon_dict.items():
+        # get the number of res rows
+        exon_info = exon_dict[k].split('\n')
+        res_row = len(exon_info)
+        # write D number
+        if row_num == 1:
+            failed_exon_ws.append(exon_header_list)
+            row_num += 1
+            failed_exon_ws.cell(row=row_num,column=1).value = k
+            insert_num = row_num + 1 
+            failed_exon_ws.insert_rows(insert_num, res_row)
+            for res in exon_info:
+                res = res.split(',')
+                gene = res[0]
+                exon_num = res[1]
+                pct_exon = res[2]
+                
+                failed_exon_ws.cell(row=row_num,column=2).value = gene    
+                failed_exon_ws.cell(row=row_num,column=3).value = exon_num     
+                failed_exon_ws.cell(row=row_num,column=4).value = pct_exon
+                row_num += 1
+
+           
+        else:
+            failed_exon_ws.cell(row=row_num,column=1).value = k
+            for res in exon_info:
+                res = res.split(',')
+                gene = res[0]
+                exon_num = res[1]
+                pct_exon = res[2]
+                
+                failed_exon_ws.cell(row=row_num,column=2).value = gene    
+                failed_exon_ws.cell(row=row_num,column=3).value = exon_num     
+                failed_exon_ws.cell(row=row_num,column=4).value = pct_exon
+                row_num += 1
+    
+    row_num = 1
+    # Parsing gene_dict dnum: '<gene>,<pct>'
+    for k,v in gene_dict.items():
+
+        # get the number of res rows
+        gene_info = gene_dict[k].split('\n')
+        res_row = len(gene_info)
+        # write D number
+        if row_num == 1:
+            failed_gene_ws.append(gene_header_list)
+            row_num += 1
+            failed_gene_ws.cell(row=row_num,column=1).value = k
+            insert_num = row_num + 1 
+            failed_gene_ws.insert_rows(insert_num, res_row)
+            for res in gene_info:
+                res = res.split(',')
+                gene = res[0]
+                pct_gene = res[1]
+                
+                failed_gene_ws.cell(row=row_num,column=2).value = gene    
+                failed_gene_ws.cell(row=row_num,column=3).value = pct_gene
+                row_num += 1
+
+           
+        else:
+            failed_gene_ws.cell(row=row_num,column=1).value = k
+            for res in gene_info:
+                res = res.split(',')
+                gene = res[0]
+                pct_gene = res[1]
+                
+                failed_gene_ws.cell(row=row_num,column=2).value = gene    
+                failed_gene_ws.cell(row=row_num,column=3).value = pct_gene
+                row_num += 1
+
+ 
+    for r in dataframe_to_rows(alt_df, index=False,header=True):
+        alt_ws.append(r)
+
+    wb.save(filename='sample_book.xlsx')
+
 
     # Create a Pandas Excel writer using XlsxWriter as the engine.
     filename = 'test_output_script'
     writer = pd.ExcelWriter(f'{filename}.xlsx', engine='xlsxwriter')
 
     # Write each dataframe to a different worksheet.
-    alt_df.to_excel(writer, sheet_name='>10_ALT_variants', index=False)
-    cov_df['gene'][0].to_excel(writer, sheet_name='Failed_gene_cov', index=False)
-    cov_df['exon'][0].to_excel(writer, sheet_name='Failed_exons_cov', index=False)
+
+    '''
+    create new df {dnum: {gene_info: [gene, pct>300],
+                          exon_info: [gene, exon, pct>100]}}
+    '''
+    new_dict = {}
+    value_list = [] 
+    
+    # print('starting convert')
+    # for k,v in cov_df.items():
+    #     # example gene_df 
+    #     # If a sample has > 
+    #     if len(v[0]['sample_name']) > 1:
+    #         samples = v[0]
+    #         for a,b in samples.items():
+    #             for e,i in b.items():
+    #                 if type(i) == str:
+    #                     dnum = i
+    #                 else:
+    #                     values = i.to_csv(index=False, header=None)
+    #                     value_list.append(values)
+    #                     new_dict["dnum"] = dnum
+    #                     new_dict[f"{k}"] = value_list
+
+    #                     print(new_dict)
+
+    #     else:
+    #         sample = v[0]['sample_name']
+    #print(new_dict)
+
+                # v[0][k] is a series of 
+                #for e in v[0][k]:
+
+ 
+
+    #     # a series (list) of data frames containing gene/exon vals
+    #     for i in v[0][k]:
+    #         if len(i) > 1:
+    #             print(k)
+    #             print(sample)
+    #             print(i.to_csv(index=False, header=None))
+    #             #result_list = v[0][k].squeeze().to_list()
+    #         else:
+    #             pass
+    #             #result_list = v[0][k].squeeze()
+
+
+    '''
+
+           cov_df{
+                gene: gene_df{
+                    sample_name: Dnum,
+                    gene_df: cov_gene_fail{
+                        Gene: gene_name, 
+                        pct>300x: value
+                        },
+                exon: exon_df{
+                    sample_name: Dnum,
+                    exon_df: cov_exon_fail{
+                        Gene: gene,
+                        Exon: exon_num,
+                        pct>100x: pct_cov
+                        }
+                        }
+                    }
+                }
+
+    '''
+
+
+    #cov_df['gene_df'][0].to_excel(writer, sheet_name='Failed_gene_cov', index=False)
+    #cov_df['exon_df'][0].to_excel(writer, sheet_name='Failed_exons_cov', index=False)
 
     # Close the Pandas Excel writer and output the Excel file.
-    writer.save()
+    #writer.save()
         
     # filename = "summary_out.xlsx"
     # wb = Workbook()
@@ -1025,6 +1180,36 @@ def ho_summary_xls(cov_df, alt_df):
     # wb.create_sheet('Failed_exons_cov', 2)
     # wb.save(filename)
 
+def ho_generate_html_output(run_details_df, check_results_df, neg_table_df):
+    '''
+    COPIED FROM TSHC
+
+    Creating a static HTML file to display the results to the Clinical Scientist reviewing the quality check report.
+    This process involves changes directly to the html. TODO find replacement method to edit html.
+    '''
+    panel = run_details_df['Panel'].squeeze()
+    with open('css_style.css') as file:
+        style = file.read()
+    run_details = run_details_df.to_html(index=False, justify='left')
+    # run_details = format_bed_files(run_details, bed_1, bed_2)
+    check_details = check_results_df.to_html(index=False, justify='left')
+    neg_table = neg_table_df.to_html(index=False, justify='left')
+
+    report_head = f'<h1>{panel} Quality Report</h1>'
+    run_sub = '<h2>Run details<h2/>'
+    check_sub = '<h2>Checks<h2/>'
+    neg_sub = '<h2>Negative control summary<h2/>'
+    html = f'<!DOCTYPE html><html><head>{style}</head><body>{report_head}{run_sub}{run_details}{check_sub}{check_details}{neg_sub}{neg_table}</body></hml>'
+
+    # # Add class to PASS/FAIL to colour code
+    html = re.sub(r"<td>PASS</td>",r"<td class='PASS'>PASS</td>", html)
+    html = re.sub(r"<td>FAIL</td>",r"<td class='FAIL'>FAIL</td>", html)
+
+    file_name = "_".join(run_details_df['Worksheet']) + '_quality_checks.html'
+
+    name = 'test.html'
+    with open(name, 'w') as file:
+        file.write(html)
 
 # Generic regex used to extact ws_num etc
 # TODO replace TSHC section with variable name
