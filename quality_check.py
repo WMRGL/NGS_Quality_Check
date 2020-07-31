@@ -484,37 +484,30 @@ def ho_main(panel, ws_1, sample_sheet):
     #create df and add results for each check
     ho_check_result_df = pd.DataFrame(columns=[ 'Worksheet','Check', 'Description','Result'])    
     ho_check_result_df, file_size_df = ho_vcf_check(result_files, ho_check_result_df)
-    ho_check_result_df, max_row_exon = ho_neg_checks(result_files, ho_check_result_df)
+    ho_check_result_df, max_row_exon_df = ho_neg_checks(result_files, ho_check_result_df)
     ho_check_result_df = verifybamid_check(result_files, ho_check_result_df)
     ho_check_result_df = ho_sry_check(result_files, ho_check_result_df)
     ho_check_result_df = ho_flt3_check(result_files, ho_check_result_df)
     ho_check_result_df, exon_dict, gene_dict = ho_coverage_check(result_files, ho_check_result_df)
     ho_neg_table_df, alt_var_df = ho_neg_summary_table(result_files)
 
-    #create and add nested html tables
+    #transpose
     file_size_df = file_size_df.transpose()
-    max_row_exon = max_row_exon.transpose()
-    file_size_html = file_size_df.to_html(header=None, justify='left', table_id='file_size_table', border=1)
-    max_exon_html = max_row_exon.to_html(header=None, justify='left', table_id='max_exon_table', border=1)
+    max_row_exon_df = max_row_exon_df.transpose()
 
-    ho_generate_html_output(run_details_df, ho_check_result_df, ho_neg_table_df, file_size_html, max_exon_html)
-
-    # ho_merged_var_xls(result_files)
+    ho_merged_var_xls(result_files)
     exon_df, gene_df, alt_df = ho_summary_xls(exon_dict, gene_dict, alt_var_df)
-    # Create html to be added to modal
-    exon_html = exon_df.to_html(header=True, index=False, justify='left', table_id='exon_fail_table')
-    gene_html = gene_df.to_html(header=True, index=False, justify='left', table_id='gene_fail_table')
-    alt_html = alt_df.to_html(header=True, index=False, justify='left', table_id='alt_fail_table')
 
-    print(exon_html)
-    print(gene_html)
-    print(alt_html)
-
-    # to access Max value
-    #print(ho_vcf_check_df['Info'][0]['Max'])
-
-    # sample_1_xls = pd.ExcelFile(sample_1)
-    # hybqc = pd.read_excel(sample_1_xls, 'Hyb-QC')
+    ho_generate_html_output(
+        run_details_df,
+        ho_check_result_df,
+        ho_neg_table_df,
+        file_size_df,
+        max_row_exon_df,
+        exon_df,
+        gene_df,
+        alt_df
+        )
 
 
 def sort_ho_inputs(panel, ws_1, sample_sheet):
@@ -615,7 +608,7 @@ def ho_vcf_check(ho_inp, ho_check_result_df):
     sample_df.columns = column_list
 
     num_sample = sample_df['Sample_ID'].count()
-    num_exp = num_sample * 2
+    num_exp = num_sample * 22732699927326999
 
     vcf_search = vcf_dir_path + '*.vcf'
     vcf_files = glob.glob(vcf_search)
@@ -865,8 +858,6 @@ def ho_coverage_check(ho_inp, ho_check_result_df):
         if exon_cov_df['pct>100x'].min() < 100:
             exon_fail_list.append(sample)
 
-        #Capture for 1.4.4 and 1.4.5 pull out Dnum?
-        #Take this out of the loop?
         sample_name = re.search(r'D\d\d-\d{5}', sample)[0]
         cov_gene_300x_df = gene_cov_df[['Gene','pct>300x']]
         cov_exon_100x_df = exon_cov_df[['Gene', 'Exon', 'pct>100x']]
@@ -968,6 +959,23 @@ def ho_merged_var_xls(ho_inp):
     xls = pd.ExcelFile(ho_inp['merged_variant_xls'])
     merged_df = pd.read_excel(xls, 'Variants-all-data')
 
+    wb = load_workbook(ho_inp['merged_variant_xls'])
+    ws = wb.get_sheet_by_name('Variants-all-data')
+    x = ws.max_row
+    y = 2
+
+    # Itterating through the xlxs in reverse order and deleting out rows
+    # This must be in reverse order as when a row is deleted the indicies is updated
+    # deleting in a reverse order stops this from inpacting which row you are deleting
+
+    for r in range(1,x+1):
+        d = ws.cell(row=x+1-r,column=2)
+        print(d.value)
+        if 'NEG' in str(d.value):   
+            ws.delete_rows(x+1-r)
+    wb.save("test_1.xlsx")
+
+
     #singleton = variants_all_df[variants_all_df['FILTER'].str.contains('singleton')].shape[0]
     merged_vars_df = merged_df[~merged_df['SAMPLE'].str.contains('NEG|neg')]
     merged_ab_df = merged_vars_df['AB']
@@ -996,7 +1004,8 @@ def ho_summary_xls(exon_dict, gene_dict, alt_df):
     '''
     Create workbook with 3 sheets >10 ALT, gene_cov, exon_cov
     
-    TODO write function for xls generation... code duplicated
+    TODO Need to simplify logic here. Originally the Dnum was only to appear once.
+    Now the Dnum is required for all exons to allow sorting in modal.
     '''
 
     # create the workbook with 2 tabs
@@ -1029,11 +1038,12 @@ def ho_summary_xls(exon_dict, gene_dict, alt_df):
                 exon_num = res[1]
                 pct_exon = res[2]
                 
+                # add the Dnum in 
+                failed_exon_ws.cell(row=row_num,column=1).value = k                
                 failed_exon_ws.cell(row=row_num,column=2).value = gene    
                 failed_exon_ws.cell(row=row_num,column=3).value = exon_num     
                 failed_exon_ws.cell(row=row_num,column=4).value = pct_exon
                 row_num += 1
-
            
         else:
             failed_exon_ws.cell(row=row_num,column=1).value = k
@@ -1043,6 +1053,8 @@ def ho_summary_xls(exon_dict, gene_dict, alt_df):
                 exon_num = res[1]
                 pct_exon = res[2]
                 
+                #add in dnum
+                failed_exon_ws.cell(row=row_num,column=1).value = k                  
                 failed_exon_ws.cell(row=row_num,column=2).value = gene    
                 failed_exon_ws.cell(row=row_num,column=3).value = exon_num     
                 failed_exon_ws.cell(row=row_num,column=4).value = pct_exon
@@ -1070,7 +1082,6 @@ def ho_summary_xls(exon_dict, gene_dict, alt_df):
                 failed_gene_ws.cell(row=row_num,column=2).value = gene    
                 failed_gene_ws.cell(row=row_num,column=3).value = pct_gene
                 row_num += 1
-
            
         else:
             failed_gene_ws.cell(row=row_num,column=1).value = k
@@ -1182,38 +1193,117 @@ def ho_summary_xls(exon_dict, gene_dict, alt_df):
     # wb.create_sheet('Failed_exons_cov', 2)
     # wb.save(filename)
 
-def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file_html, exon_html):
+def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file_df, max_exon_df, exon_df, gene_df, alt_df):
     '''
     Creating a static HTML file to display the results to the Clinical Scientist reviewing the quality check report.
     This process involves changes directly to the html. TODO find replacement method to edit html.
     '''
+    #Add header to gene and exon df tables and remove none values from failed exon table
+    if gene_df.empty == False:
+        gene_df = gene_df.rename(columns=gene_df.iloc[0]).drop(gene_df.index[0]).sort_values(by=['Sample'])
+    else:
+        gene_df = pd.DataFrame(columns=['Message'])
+        gene_mess = 'All samples in this worksheet have genes at >80% 300X.'
+        gene_df = gene_df.append({'Message': gene_mess}, ignore_index=True)
+    if exon_df.empty == False:
+        exon_df = exon_df.rename(columns=exon_df.iloc[0]).drop(exon_df.index[0]).sort_values(by=['Sample'])
+    else:
+        exon_df = pd.DataFrame(columns=['Message'])
+        exon_mess = 'All samples in this worksheet have exon coverage at 100% 100X.'
+        exon_df = exon_df.append({'Message': exon_mess}, ignore_index=True)
+    if alt_df.empty == False:
+        alt_df = alt_df.loc[:,'Index':'AB'].drop('Caller', axis=1)
+    else:
+        alt_df = pd.DataFrame(columns=['Message'])
+        alt_mess = 'The negative sample for this worksheet does not contain any variants with >= 10 alt reads.'
+        alt_df = alt_df.append({'Message': alt_mess}, ignore_index=True)
 
-    run_details = run_details_df.to_html(table_id='test_table', index=False, justify='left')
+    # Create main HTML files from df
+    css_classes = ['table', 'table-striped']
 
-    panel = run_details_df['Panel'].squeeze()
-    with open('css_style.css') as file:
-        style = file.read()
-    run_details = run_details_df.to_html(index=False, justify='left')
-    check_details = check_results_df.to_html(index=False, justify='left')
-    # add in nested tables
-    check_details = add_nest_tables(check_details, file_html, exon_html)
-    neg_table = neg_table_df.to_html(index=False, justify='left')
+    run_details_html = run_details_df.to_html(classes= css_classes, table_id='run_details_table', index=False, justify='left', border=0)
+    check_results_html = check_results_df.to_html(classes= css_classes, table_id='check_table', index=False, justify='left', border=0)
+    # Add green and red colouring to PASS/FAIL
+    check_results_html = re.sub(r"<td>PASS</td>",r"<td style='color:green;'>PASS</td>", check_results_html)
+    check_results_html = re.sub(r"<td>FAIL</td>",r"<td style='color:red;'>FAIL</td>", check_results_html)
+    neg_details_html = neg_table_df.to_html(classes= css_classes ,table_id='neg_table', index=False, justify='left', border=0)
 
-    report_head = f'<h1>{panel} Quality Report</h1>'
-    run_sub = '<h2>Run details<h2/>'
-    check_sub = '<h2>Checks<h2/>'
-    neg_sub = '<h2>Negative control summary<h2/>'
-    html = f'<!DOCTYPE html><html><head>{style}</head><body>{report_head}{run_sub}{run_details}{check_sub}{check_details}{neg_sub}{neg_table}</body></hml>'
+    #create addition HTML files from df
+    file_size_html = file_df.to_html(classes= css_classes, header=None, justify='left', table_id='file_size_table', border=0)
+    max_exon_html = max_exon_df.to_html(classes= css_classes, header=None, justify='left', table_id='max_exon_table', border=0)
 
-    # # Add class to PASS/FAIL to colour code
-    html = re.sub(r"<td>PASS</td>",r"<td class='PASS'>PASS</td>", html)
-    html = re.sub(r"<td>FAIL</td>",r"<td class='FAIL'>FAIL</td>", html)
+    if exon_df.shape[1] == 1: 
+        exon_html = exon_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='exon_fail_table', border=0)
+    else:
+        exon_html = exon_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='exon_fail_table', border=0)
+    if gene_df.shape[1] == 1:
+        gene_html = gene_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='gene_fail_table', border=0)
+    else:
+        gene_html = gene_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='gene_fail_table', border=0)
+    if alt_df.shape[1] == 1:       
+        alt_html = alt_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='alt_fail_table', border=0)
+    else:
+        alt_html = alt_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='alt_fail_table', border=0)
 
-    file_name = "_".join(run_details_df['Worksheet']) + '_quality_checks.html'
- 
-    name = 'test.html'
-    with open(name, 'w') as file:
-        file.write(html)
+    #read in html base file
+    with open('HO_base.html', 'r') as file:
+        base = file.read()
+
+    # Subbing in text to replace placeholders    
+    base = re.sub(r'{run_details_html}', f'{run_details_html}', base)
+    base = re.sub(r'{check_results_html}', f'{check_results_html}', base) 
+    base = re.sub(r'_vcf_min_max_', f'{file_size_html}', base)
+    base = re.sub(r'_neg_exon_depth_', f'{max_exon_html}', base)    
+    base = re.sub(r'{neg_details_html}', f'{neg_details_html}', base)  
+    html_report = base
+
+    #get modal template
+    with open('modal_base.html') as file:
+        modal_base = file.read()
+
+    #Add table to modal
+    gene_modal_name = 'Failed_genes'
+    gene_modal_title = 'Failed genes'
+    failed_gene_modal = re.sub(r'_modal_name_', f'{gene_modal_name}', modal_base)  
+    failed_gene_modal = re.sub(r'_modal_title_', f'{gene_modal_title}', failed_gene_modal)  
+    failed_gene_modal  = re.sub(r'_modal_table_', f'{gene_html}', failed_gene_modal)  
+
+    exon_modal_name = 'Failed_exons'
+    exon_modal_title = 'Failed exons'
+    failed_exon_modal = re.sub(r'_modal_name_', f'{exon_modal_name}', modal_base)  
+    failed_exon_modal = re.sub(r'_modal_title_', f'{exon_modal_title}', failed_exon_modal)  
+    failed_exon_modal  = re.sub(r'_modal_table_', f'{exon_html}', failed_exon_modal) 
+
+    alt_modal_name = 'alt_variants'
+    alt_modal_title = 'ALT variants'
+    alt_var_modal = re.sub(r'_modal_name_', f'{alt_modal_name}', modal_base)  
+    alt_var_modal = re.sub(r'_modal_title_', f'{alt_modal_title}', alt_var_modal)  
+    alt_var_modal  = re.sub(r'_modal_table_', f'{alt_html}', alt_var_modal)
+    alt_var_modal = re.sub(r'modal-dialog','modal-dialog modal-lg', alt_var_modal)
+
+    #Position modals on HTML report
+    gene_target_str = r'<td>All samples in this worksheet have genes at &gt;80% 300X.</td>'
+    gene_rep_str = f'<td>All samples in this worksheet have genes at &gt;80% 300X.{failed_gene_modal}</td>'
+    html_report = re.sub(gene_target_str, gene_rep_str, html_report)
+
+    exon_target_str = r'<td>All samples in this worksheet have exon coverage at 100% 100X.</td>'
+    exon_rep_str = f'<td>All samples in this worksheet have exon coverage at 100% 100X.{failed_exon_modal}</td>'
+    html_report = re.sub(exon_target_str, exon_rep_str, html_report)      
+
+    alt_call_num = int(re.search(r'(\d+) calls', neg_table_df['ALT reads'].values[0]).group(1))
+    alt_target_str = f'<td>{alt_call_num} calls &gt;= 10 alt reads</td>'
+    alt_rep_str = f'<td>{alt_call_num} calls &gt;= 10 alt reads {alt_var_modal}</td>'
+    html_report = re.sub(alt_target_str, alt_rep_str, html_report)     
+
+    #small formatting changes to modal
+    modal_size_str = '<button type="button" class="btn pull-right" data-toggle="modal" data-target="#alt_variants">Details</button>'
+    modal_size_rep = '<button type="button" class="btn" data-toggle="modal" data-target="#alt_variants">Details</button>'
+    html_report = re.sub(modal_size_str, modal_size_rep, html_report)
+
+    #Add in modal to html report
+    html_name = 'test_out.html'
+    with open(html_name, 'w') as file:
+        file.write(html_report)
 
 def add_nest_tables(check_details, file_html, exon_html):
     
@@ -1227,7 +1317,6 @@ def add_nest_tables(check_details, file_html, exon_html):
 # Generic regex used to extact ws_num etc
 # TODO replace TSHC section with variable name
 panel_regex = r'\/(\w{4,7})_(\d{6})_(v[\.]?\d\.\d\.\d)\/'
-
 ws_1 = args.ws_1
 ws_2 = args.ws_2
 sample_sheet = args.samplesheet
