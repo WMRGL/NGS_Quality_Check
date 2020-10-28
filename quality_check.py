@@ -6,8 +6,9 @@ import re
 import numpy as np
 import glob
 import enum
-from openpyxl import load_workbook, Workbook
+from openpyxl import load_workbook, Workbook, styles, formatting
 from openpyxl.utils.dataframe import dataframe_to_rows
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-ws_1', action='store', required=True, help='Path to worksheet 1 output files include TSHC_<ws>_version dir')
@@ -495,7 +496,7 @@ def ho_main(panel, ws_1, sample_sheet):
     file_size_df = file_size_df.transpose()
     max_row_exon_df = max_row_exon_df.transpose()
 
-    ho_merged_var_xls(result_files)
+    #ho_merged_var_xls(result_files)
     exon_df, gene_df, alt_df = ho_summary_xls(exon_dict, gene_dict, alt_var_df)
 
     ho_generate_html_output(
@@ -608,7 +609,8 @@ def ho_vcf_check(ho_inp, ho_check_result_df):
     sample_df.columns = column_list
 
     num_sample = sample_df['Sample_ID'].count()
-    num_exp = num_sample * 22732699927326999
+
+    num_exp = num_sample * 2
 
     vcf_search = vcf_dir_path + '*.vcf'
     vcf_files = glob.glob(vcf_search)
@@ -697,6 +699,10 @@ def ho_neg_checks(ho_inp, ho_check_result_df):
     max_row_exon = neg_exon_df.loc[neg_exon_df['Max'] == max_num_exons]
     max_row_exon = max_row_exon[['Gene', 'Exon', 'Max']]
 
+    # If more than 1 exon has the same max value select the first
+    if len(max_row_exon) > 1:
+        max_row_exon = max_row_exon[:1]
+
     neg_depth_check = 'Negative exon depth check'
     neg_depth_check_des = f'The maximum depth of each exon of the negative sample does not exceed 30 reads. _neg_exon_depth_'
 
@@ -732,22 +738,14 @@ def ho_neg_checks(ho_inp, ho_check_result_df):
 
 def verifybamid_check(ho_inp, ho_check_result_df):
     '''
-    Checks the verifybamid tab to ensure samples do not exceed contamination thresholds:
-        CLL > 3%
-        MPN > 10%
-        TSMP > ?
-    TODO- Check the threshold for TSMP panel sample. For now the value is 3%. Is this correct?
+    Checks the verifybamid tab to ensure samples do not exceed contamination 10% threshold.
     '''
 
-    panel = ho_inp['panel']
-    
-    if panel == 'MPN':
-        threshold = 10.0
-    else:
-        threshold = 3.0
+    threshold = 10.0
 
     # pick the first sample results xls verifybamid common across samples 
     xls_path = ho_inp['pat_results'][0]
+
     xls = pd.ExcelFile(xls_path)
     verifybamid_df = pd.read_excel(xls, 'VerifyBamId')
 
@@ -755,7 +753,7 @@ def verifybamid_check(ho_inp, ho_check_result_df):
 
     worksheet = ho_inp['worksheet']
     verifybamid_check = 'VerifyBamId check'
-    verifybamid_check_des = f'Percentage contamination is below {int(threshold)}%'
+    verifybamid_check_des = f'Percentage contamination is below {int(threshold)}%.'
 
     if max_cont > threshold:
         verifybamid_res = 'FAIL'
@@ -803,10 +801,10 @@ def ho_flt3_check(ho_inp, ho_check_result_df):
         xls = pd.ExcelFile(sample)
         verifybamid_df = pd.read_excel(xls, 'FLT3')
         flt3_var_list.append(verifybamid_df.shape[0])
-    
+
     worksheet = ho_inp['worksheet']
     flt3_check = 'FLT3 variant check'
-    flt3_check_des = f'FLT3 variants have called by Manta or Pindel for this worksheet.'
+    flt3_check_des = f'FLT3 variants are present on the FLT3 tab for samples on this worksheet.'
 
     if max(flt3_var_list) > 0:
         flt3_check_res = 'PASS'
@@ -823,7 +821,7 @@ def ho_flt3_check(ho_inp, ho_check_result_df):
 def ho_coverage_check(ho_inp, ho_check_result_df):
     '''
     Checks coverage is > 80% 300X (coverage-gene)
-    Checks coverage is > 80% 100X (coverage-exon)
+    Checks coverage is == 100% 100X (coverage-exon)
 
     Collect exon and gene fails for excel spreadsheet.
     data stored in a dictionary:
@@ -966,14 +964,12 @@ def ho_merged_var_xls(ho_inp):
 
     # Itterating through the xlxs in reverse order and deleting out rows
     # This must be in reverse order as when a row is deleted the indicies is updated
-    # deleting in a reverse order stops this from inpacting which row you are deleting
-
-    for r in range(1,x+1):
-        d = ws.cell(row=x+1-r,column=2)
-        print(d.value)
-        if 'NEG' in str(d.value):   
-            ws.delete_rows(x+1-r)
-    wb.save("test_1.xlsx")
+    # deleting in a reverse order stops this from impacting which row you are deleting
+    # for r in range(1,x+1):
+    #     d = ws.cell(row=x+1-r,column=2)
+    #     if 'NEG' in str(d.value):   
+    #         ws.delete_rows(x+1-r)
+    # wb.save("test_1.xlsx")
 
 
     #singleton = variants_all_df[variants_all_df['FILTER'].str.contains('singleton')].shape[0]
@@ -989,7 +985,7 @@ def ho_merged_var_xls(ho_inp):
     excel_name = f'{panel}_{worksheet}'
     #write to excel
     xls_write = os.getcwd() + f'/{excel_name}.merged-variants.xlsx'
-    merged_vars_df.to_excel(xls_write, sheet_name='Variants-all-data')    
+    merged_vars_df.to_excel(xls_write, sheet_name='Variants-all-data', index=False)    
 
     wb = load_workbook(filename=xls_write)
     merged_sheet = wb.get_sheet_by_name('Variants-all-data')
@@ -998,6 +994,16 @@ def ho_merged_var_xls(ho_inp):
     merged_sheet.cell(row=2, column=15).value = stdev_ab
     merged_sheet.cell(row=3, column=15).value = plus_two_std
     merged_sheet.cell(row=4, column=15).value = minus_two_std
+
+    red_color = 'ffc7ce'
+    red_color_font = '9c0103'
+
+    red_font = styles.Font(size=14, bold=False, color=red_color_font)
+    red_fill = styles.PatternFill(start_color=red_color, end_color=red_color, fill_type='solid')
+
+    merged_sheet.conditional_formatting.add('l6:l1000', formatting.rule.CellIsRule(operator='between', formula=['1','100'], fill=red_fill, font=red_font))
+    merged_sheet.conditional_formatting.add('N6:N1000', formatting.rule.CellIsRule(operator='between', formula=['O4','O3'], fill=red_fill, font=red_font))
+    merged_sheet.conditional_formatting.add('B1:B10', formatting.rule.CellIsRule(operator='lessThan', formula=['0'], fill=red_fill))
     wb.save(xls_write)
 
 def ho_summary_xls(exon_dict, gene_dict, alt_df):
@@ -1300,10 +1306,18 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
     modal_size_rep = '<button type="button" class="btn" data-toggle="modal" data-target="#alt_variants">Details</button>'
     html_report = re.sub(modal_size_str, modal_size_rep, html_report)
 
-    #Add in modal to html report
-    html_name = 'test_out.html'
-    with open(html_name, 'w') as file:
-        file.write(html_report)
+    worksheet_num = run_details_df['Worksheet'].squeeze()
+    html_name = f'{worksheet_num}_quality_checks.html'
+
+    if args.out_dir == None:
+        with open(html_name, 'w') as file:
+            file.write(html_report)
+    else:
+        print(f'Saving html reports to {args.out_dir}')
+        os.chdir(args.out_dir)
+        with open(html_name, 'w') as file:
+            file.write(html_report)
+
 
 def add_nest_tables(check_details, file_html, exon_html):
     
