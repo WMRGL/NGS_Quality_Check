@@ -485,17 +485,17 @@ def ho_main(panel, ws_1, sample_sheet):
     #create df and add results for each check
     ho_check_result_df = pd.DataFrame(columns=[ 'Worksheet','Check', 'Description','Result'])    
     ho_check_result_df, file_size_df = ho_vcf_check(result_files, ho_check_result_df)
-    ho_check_result_df, max_row_exon_df = ho_neg_checks(result_files, ho_check_result_df)
+    ho_check_result_df, max_row_exon_df, ho_neg_table_df, alt_var_df = ho_neg_checks(result_files, ho_check_result_df)
     ho_check_result_df = verifybamid_check(result_files, ho_check_result_df)
     ho_check_result_df = ho_sry_check(result_files, ho_check_result_df)
     ho_check_result_df = ho_flt3_check(result_files, ho_check_result_df)
     ho_check_result_df, exon_dict, gene_dict = ho_coverage_check(result_files, ho_check_result_df)
-    ho_neg_table_df, alt_var_df = ho_neg_summary_table(result_files)
 
     #transpose
     file_size_df = file_size_df.transpose()
     max_row_exon_df = max_row_exon_df.transpose()
 
+    #TODO review this logic
     #ho_merged_var_xls(result_files)
     exon_df, gene_df, alt_df = ho_summary_xls(exon_dict, gene_dict, alt_var_df)
 
@@ -699,6 +699,14 @@ def ho_neg_checks(ho_inp, ho_check_result_df):
     max_row_exon = neg_exon_df.loc[neg_exon_df['Max'] == max_num_exons]
     max_row_exon = max_row_exon[['Gene', 'Exon', 'Max']]
 
+    #Calculate adjusted sensitivity required
+    sens_cov = 200
+    neg_sens = max_num_exons + sens_cov
+    sens_cal = 10 / neg_sens * 100
+    sensitivity = str(round(sens_cal, 2)) + '%'
+
+    max_row_exon['Sensitivity'] = sensitivity
+
     # If more than 1 exon has the same max value select the first
     if len(max_row_exon) > 1:
         max_row_exon = max_row_exon[:1]
@@ -712,12 +720,16 @@ def ho_neg_checks(ho_inp, ho_check_result_df):
         neg_depth_res = 'PASS'
 
     neg_zero_check = 'Negative exon depth check > 0'
-    neg_zero_check_des = f'The maximum number of reads in each exon of the negative sample is greater than 0.'    
+    neg_zero_check_des = f'The maximum number of reads in each exon of the negative sample is greater than 0. _neg_zero_'    
 
     if max_num_exons > 0:
         neg_zero_res = 'PASS'
     else:
         neg_zero_res = 'FAIL'
+
+    ## singleton and num ATL reads (inc details button)
+    ho_neg_table_df, alt_var_df = ho_neg_summary_table(ho_inp)
+
 
     ho_check_result_df = ho_check_result_df.append({'Check': neg_exon_check,
                                             'Description': neg_exon_check_des,
@@ -734,7 +746,7 @@ def ho_neg_checks(ho_inp, ho_check_result_df):
                                             'Result': neg_zero_res,
                                             'Worksheet': worksheet}, ignore_index=True)
 
-    return ho_check_result_df, max_row_exon
+    return ho_check_result_df, max_row_exon, ho_neg_table_df, alt_var_df
 
 def verifybamid_check(ho_inp, ho_check_result_df):
     '''
@@ -910,9 +922,7 @@ def ho_neg_summary_table(ho_inp):
     This function also captures information to be added to a separate xls
     '''
 
-    worksheet = ho_inp['worksheet']
-    panel = ho_inp['panel']
-    ho_neg_table_df = pd.DataFrame(columns=['Worksheet', 'Panel', 'Singletons', 'ALT reads', 'Sensitivity'])
+    ho_neg_table_df = pd.DataFrame(columns=['Singletons', 'ALT reads'])
 
     xls = pd.ExcelFile(ho_inp['negative'])
     variants_all_df = pd.read_excel(xls, 'Variants-all-data')
@@ -926,26 +936,15 @@ def ho_neg_summary_table(ho_inp):
     alt_var = alt_var_df.shape[0]
     alt_var_res = f'{alt_var} calls >= 10 alt reads'
 
-    # TODO this is duplicated from Neg check
-    neg_xls_path = ho_inp['negative']
-    neg_xls = pd.ExcelFile(ho_inp['negative'])
-    neg_exon_df = pd.read_excel(neg_xls, 'Coverage-exon')
-    max_num_exons = neg_exon_df['Max'].max()
+    # # TODO this is duplicated from Neg check
+    # neg_xls_path = ho_inp['negative']
+    # neg_xls = pd.ExcelFile(ho_inp['negative'])
+    # neg_exon_df = pd.read_excel(neg_xls, 'Coverage-exon')
+    # max_num_exons = neg_exon_df['Max'].max()
 
-    #Calculate adjusted sensitivity required
-    sens_cov = 200
-    neg_sens = max_num_exons + sens_cov
-    sens_cal = 10 / neg_sens * 100
-    sens_cal_res = str(round(sens_cal, 2)) + '%'
-
-
-    ho_neg_table_df = ho_neg_table_df.append({'Worksheet': worksheet,
-                                            'Panel': panel,
-                                            'Singletons': singleton_res,
+    ho_neg_table_df = ho_neg_table_df.append({'Singletons': singleton_res,
                                             'ALT reads': alt_var_res,
-                                            'Sensitivity': sens_cal_res
                                             }, ignore_index=True) 
-
 
 
     return [ho_neg_table_df, alt_var_df]
@@ -957,11 +956,10 @@ def ho_merged_var_xls(ho_inp):
     xls = pd.ExcelFile(ho_inp['merged_variant_xls'])
     merged_df = pd.read_excel(xls, 'Variants-all-data')
 
-    wb = load_workbook(ho_inp['merged_variant_xls'])
-    ws = wb.get_sheet_by_name('Variants-all-data')
-    x = ws.max_row
-    y = 2
-
+    # wb = load_workbook(ho_inp['merged_variant_xls'])
+    # ws = wb.get_sheet_by_name('Variants-all-data')
+    # x = ws.max_row
+    # y = 2
     # Itterating through the xlxs in reverse order and deleting out rows
     # This must be in reverse order as when a row is deleted the indicies is updated
     # deleting in a reverse order stops this from impacting which row you are deleting
@@ -970,9 +968,8 @@ def ho_merged_var_xls(ho_inp):
     #     if 'NEG' in str(d.value):   
     #         ws.delete_rows(x+1-r)
     # wb.save("test_1.xlsx")
-
-
     #singleton = variants_all_df[variants_all_df['FILTER'].str.contains('singleton')].shape[0]
+
     merged_vars_df = merged_df[~merged_df['SAMPLE'].str.contains('NEG|neg')]
     merged_ab_df = merged_vars_df['AB']
     mean_ab = merged_ab_df.mean()
@@ -1205,6 +1202,9 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
     This process involves changes directly to the html. TODO find replacement method to edit html.
     '''
     #Add header to gene and exon df tables and remove none values from failed exon table
+
+    print(check_results_df)
+
     if gene_df.empty == False:
         gene_df = gene_df.rename(columns=gene_df.iloc[0]).drop(gene_df.index[0]).sort_values(by=['Sample'])
     else:
@@ -1259,8 +1259,8 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
     base = re.sub(r'{run_details_html}', f'{run_details_html}', base)
     base = re.sub(r'{check_results_html}', f'{check_results_html}', base) 
     base = re.sub(r'_vcf_min_max_', f'{file_size_html}', base)
-    base = re.sub(r'_neg_exon_depth_', f'{max_exon_html}', base)    
-    base = re.sub(r'{neg_details_html}', f'{neg_details_html}', base)  
+    base = re.sub(r'_neg_exon_depth_', f'{max_exon_html}', base)  
+    base = re.sub(r'_neg_zero_', f'{neg_details_html}', base) 
     html_report = base
 
     #get modal template
