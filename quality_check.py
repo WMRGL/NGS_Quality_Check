@@ -719,7 +719,7 @@ def ho_neg_checks(ho_inp, ho_check_result_df):
     else:
         neg_depth_res = 'PASS'
 
-    neg_zero_check = 'Negative exon depth check > 0'
+    neg_zero_check = 'Negative read check > 0'
     neg_zero_check_des = f'The maximum number of reads in each exon of the negative sample is greater than 0. _neg_zero_'    
 
     if max_num_exons > 0:
