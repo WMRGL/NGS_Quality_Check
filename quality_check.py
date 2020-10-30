@@ -486,7 +486,7 @@ def ho_main(panel, ws_1, sample_sheet):
     ho_check_result_df = pd.DataFrame(columns=[ 'Worksheet','Check', 'Description','Result'])    
     ho_check_result_df, file_size_df = ho_vcf_check(result_files, ho_check_result_df)
     ho_check_result_df, max_row_exon_df, ho_neg_table_df, alt_var_df = ho_neg_checks(result_files, ho_check_result_df)
-    ho_check_result_df = verifybamid_check(result_files, ho_check_result_df)
+    ho_check_result_df, verify_fail_df = verifybamid_check(result_files, ho_check_result_df)
     ho_check_result_df = ho_sry_check(result_files, ho_check_result_df)
     ho_check_result_df = ho_flt3_check(result_files, ho_check_result_df)
     ho_check_result_df, exon_dict, gene_dict = ho_coverage_check(result_files, ho_check_result_df)
@@ -507,7 +507,8 @@ def ho_main(panel, ws_1, sample_sheet):
         max_row_exon_df,
         exon_df,
         gene_df,
-        alt_df
+        alt_df,
+        verify_fail_df
         )
 
 
@@ -772,12 +773,18 @@ def verifybamid_check(ho_inp, ho_check_result_df):
     else:
         verifybamid_res = 'PASS'
 
+    # Create df of failed samples
+    verifybamid_df['%CONT'] = verifybamid_df['%CONT'].astype(float)
+    verifybamid_df = verifybamid_df[['SAMPLE','%CONT']]
+    verify_fail_df = verifybamid_df[verifybamid_df['%CONT'] > 10.0]
+
+
     ho_check_result_df = ho_check_result_df.append({'Check': verifybamid_check,
                                             'Description': verifybamid_check_des,
                                             'Result': verifybamid_res,
                                             'Worksheet': worksheet}, ignore_index=True)
 
-    return ho_check_result_df
+    return ho_check_result_df, verify_fail_df
 
 def ho_sry_check(ho_inp, ho_check_result_df):
     '''
@@ -1196,15 +1203,14 @@ def ho_summary_xls(exon_dict, gene_dict, alt_df):
     # wb.create_sheet('Failed_exons_cov', 2)
     # wb.save(filename)
 
-def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file_df, max_exon_df, exon_df, gene_df, alt_df):
+def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file_df, max_exon_df, exon_df, gene_df, alt_df, verify_fail_df):
     '''
     Creating a static HTML file to display the results to the Clinical Scientist reviewing the quality check report.
     This process involves changes directly to the html. TODO find replacement method to edit html.
     '''
     #Add header to gene and exon df tables and remove none values from failed exon table
 
-    print(check_results_df)
-
+    # converting xls to dfs means that they first row is the spreadsheet header .rename(..).drop(..) moves these to column headers is df
     if gene_df.empty == False:
         gene_df = gene_df.rename(columns=gene_df.iloc[0]).drop(gene_df.index[0]).sort_values(by=['Sample'])
     else:
@@ -1223,6 +1229,10 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
         alt_df = pd.DataFrame(columns=['Message'])
         alt_mess = 'The negative sample for this worksheet does not contain any variants with >= 10 alt reads.'
         alt_df = alt_df.append({'Message': alt_mess}, ignore_index=True)
+    if verify_fail_df.empty == True:
+        verify_fail_df = pd.DataFrame(columns=['Message'])
+        verify_fail_mess = 'All samples in this worksheet have a %CONT score < 10%.'
+        verify_fail_df = verify_fail_df.append({'Message': verify_fail_mess}, ignore_index=True)
 
     # Create main HTML files from df
     css_classes = ['table', 'table-striped']
@@ -1234,10 +1244,11 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
     check_results_html = re.sub(r"<td>FAIL</td>",r"<td style='color:red;'>FAIL</td>", check_results_html)
     neg_details_html = neg_table_df.to_html(classes= css_classes ,table_id='neg_table', index=False, justify='left', border=0)
 
-    #create addition HTML files from df
+    #create addition HTML files from df. These are the non-modal tables
     file_size_html = file_df.to_html(classes= css_classes, header=None, justify='left', table_id='file_size_table', border=0)
     max_exon_html = max_exon_df.to_html(classes= css_classes, header=None, justify='left', table_id='max_exon_table', border=0)
 
+    #Modal tables require extra logic to handle when no samples meet criteria (column == 1)
     if exon_df.shape[1] == 1: 
         exon_html = exon_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='exon_fail_table', border=0)
     else:
@@ -1250,6 +1261,11 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
         alt_html = alt_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='alt_fail_table', border=0)
     else:
         alt_html = alt_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='alt_fail_table', border=0)
+    if verify_fail_df.shape[1] == 1:
+        verify_fail_html = verify_fail_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='verify_fail_table', border=0)
+    else:
+        verify_fail_html = verify_fail_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='verify_fail_table', border=0)
+
 
     #read in html base file
     with open('HO_base.html', 'r') as file:
@@ -1287,6 +1303,14 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
     alt_var_modal  = re.sub(r'_modal_table_', f'{alt_html}', alt_var_modal)
     alt_var_modal = re.sub(r'modal-dialog','modal-dialog modal-lg', alt_var_modal)
 
+    ## Add verify_fail_modal here!
+    verify_modal_name = 'verify_fail'
+    verify_modal_title = 'VerifyBamId fails'
+    verify_fail_modal = re.sub(r'_modal_name_', f'{verify_modal_name}', modal_base)  
+    verify_fail_modal = re.sub(r'_modal_title_', f'{verify_modal_title}', verify_fail_modal)  
+    verify_fail_modal  = re.sub(r'_modal_table_', f'{verify_fail_html}', verify_fail_modal)
+    verify_fail_modal = re.sub(r'modal-dialog','modal-dialog modal-lg', verify_fail_modal)    
+
     #Position modals on HTML report
     gene_target_str = r'<td>All samples in this worksheet have genes at &gt;80% 300X.</td>'
     gene_rep_str = f'<td>All samples in this worksheet have genes at &gt;80% 300X.{failed_gene_modal}</td>'
@@ -1300,6 +1324,10 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
     alt_target_str = f'<td>{alt_call_num} calls &gt;= 10 alt reads</td>'
     alt_rep_str = f'<td>{alt_call_num} calls &gt;= 10 alt reads {alt_var_modal}</td>'
     html_report = re.sub(alt_target_str, alt_rep_str, html_report)     
+
+    verify_target_str = r'<td>Percentage contamination is below 10%.</td>'
+    verify_rep_str = f'<td>Percentage contamination is below 10%. {verify_fail_modal}</td>'
+    html_report = re.sub(verify_target_str, verify_rep_str, html_report)
 
     #small formatting changes to modal
     modal_size_str = '<button type="button" class="btn pull-right" data-toggle="modal" data-target="#alt_variants">Details</button>'
