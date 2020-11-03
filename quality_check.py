@@ -892,7 +892,7 @@ def ho_coverage_check(ho_inp, ho_check_result_df):
         exon_cov_df = pd.read_excel(xls, 'Coverage-exon')
 
         #Coverage-gene tab
-        if gene_cov_df['pct>300x'].min() < 80.0:
+        if gene_cov_df['pct>300x'].min() < 79.5:
             gene_fail_list.append(sample)
 
         #Coverage-exon tab
@@ -902,7 +902,7 @@ def ho_coverage_check(ho_inp, ho_check_result_df):
         sample_name = re.search(r'D\d\d-\d{5}', sample)[0]
         cov_gene_300x_df = gene_cov_df[['Gene','pct>300x']]
         cov_exon_100x_df = exon_cov_df[['Gene', 'Exon', 'pct>100x']]
-        cov_gene_fail = cov_gene_300x_df.loc[cov_gene_300x_df['pct>300x'] < 80]
+        cov_gene_fail = cov_gene_300x_df.loc[cov_gene_300x_df['pct>300x'] < 79.5]
         cov_exon_fail = cov_exon_100x_df.loc[cov_exon_100x_df['pct>100x'] < 100]
 
         exon_dets = cov_exon_fail.to_csv(index=False, header=None)
