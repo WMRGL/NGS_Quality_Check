@@ -488,7 +488,7 @@ def ho_main(panel, ws_1, sample_sheet):
     ho_check_result_df, max_row_exon_df, ho_neg_table_df, alt_var_df = ho_neg_checks(result_files, ho_check_result_df)
     ho_check_result_df, verify_fail_df = verifybamid_check(result_files, ho_check_result_df)
     ho_check_result_df = ho_sry_check(result_files, ho_check_result_df)
-    ho_check_result_df = ho_flt3_check(result_files, ho_check_result_df)
+    ho_check_result_df, flt3_fail_df = ho_flt3_check(result_files, ho_check_result_df)
     ho_check_result_df, exon_dict, gene_dict = ho_coverage_check(result_files, ho_check_result_df)
 
     #transpose
@@ -508,7 +508,8 @@ def ho_main(panel, ws_1, sample_sheet):
         exon_df,
         gene_df,
         alt_df,
-        verify_fail_df
+        verify_fail_df,
+        flt3_fail_df
         )
 
 
@@ -813,29 +814,52 @@ def ho_sry_check(ho_inp, ho_check_result_df):
 def ho_flt3_check(ho_inp, ho_check_result_df):
     '''
     If any variants are present on FLT3 tab then the check will pass
+    #TODO handle cases where no FLT3 tab is present
     '''
     flt3_var_list = []
     sample_list = ho_inp['pat_results']
+    flt3_check_res = None
+    flt3_fail_df = pd.DataFrame(columns=['Sample','AD', 'ALT-REF'])
+
+    # try except block handles when FLT3 tab not present e.g. CLL panel
     for sample in sample_list:
         xls = pd.ExcelFile(sample)
-        verifybamid_df = pd.read_excel(xls, 'FLT3')
-        flt3_var_list.append(verifybamid_df.shape[0])
+        try:
+            flt3_df = pd.read_excel(xls, 'FLT3')
+            flt3_var_list.append(flt3_df.shape[0])
+            if not flt3_df.empty:
+                sample_name = re.search(r'D\d\d-\d{5}', sample)[0]
+                flt3 = flt3_df[['AD','ALT-REF']]   
+                flt3['Sample'] = sample_name
+                flt3 = flt3[['Sample','AD','ALT-REF']]
+                flt3_fail_df = flt3_fail_df.append(flt3, ignore_index=True)
+
+        except:
+            flt3_check_res = 'N/A'
+
+    flt3_fail_df = flt3_fail_df.sort_values(by=['Sample'])
 
     worksheet = ho_inp['worksheet']
     flt3_check = 'FLT3 variant check'
     flt3_check_des = f'FLT3 variants are present on the FLT3 tab for samples on this worksheet.'
 
-    if max(flt3_var_list) > 0:
-        flt3_check_res = 'PASS'
+    if not flt3_var_list:
+        flt3_check_res = flt3_check_res
     else:
-        flt3_check_res = 'FAIL'
+        if max(flt3_var_list) > 0:
+            flt3_check_res = 'PASS'
+        elif flt3_var_list == 0 and flt3_check_res == None:
+            flt3_check_res = 'FAIL'
+        else:
+            raise Exception("Error- Check FLT3 tabs!")
+
 
     ho_check_result_df = ho_check_result_df.append({'Check': flt3_check,
                                             'Description': flt3_check_des,
                                             'Result': flt3_check_res,
                                             'Worksheet': worksheet}, ignore_index=True) 
 
-    return ho_check_result_df
+    return ho_check_result_df, flt3_fail_df
 
 def ho_coverage_check(ho_inp, ho_check_result_df):
     '''
@@ -1203,7 +1227,7 @@ def ho_summary_xls(exon_dict, gene_dict, alt_df):
     # wb.create_sheet('Failed_exons_cov', 2)
     # wb.save(filename)
 
-def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file_df, max_exon_df, exon_df, gene_df, alt_df, verify_fail_df):
+def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file_df, max_exon_df, exon_df, gene_df, alt_df, verify_fail_df, flt3_fail_df):
     '''
     Creating a static HTML file to display the results to the Clinical Scientist reviewing the quality check report.
     This process involves changes directly to the html. TODO find replacement method to edit html.
@@ -1233,6 +1257,11 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
         verify_fail_df = pd.DataFrame(columns=['Message'])
         verify_fail_mess = 'All samples in this worksheet have a %CONT score < 10%.'
         verify_fail_df = verify_fail_df.append({'Message': verify_fail_mess}, ignore_index=True)
+    if flt3_fail_df.empty == True:
+        flt3_fail_df = pd.DataFrame(columns=['Message'])
+        flt3_fail_mess = 'No FLT3 variants have been called.'
+        flt3_fail_df = flt3_fail_df.append({'Message': verify_fail_mess}, ignore_index=True)
+
 
     # Create main HTML files from df
     css_classes = ['table', 'table-striped']
@@ -1265,7 +1294,10 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
         verify_fail_html = verify_fail_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='verify_fail_table', border=0)
     else:
         verify_fail_html = verify_fail_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='verify_fail_table', border=0)
-
+    if flt3_fail_df.shape[1] == 1:
+        flt3_fail_html = flt3_fail_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='flt3_fail_table', border=0)
+    else:
+        flt3_fail_html = flt3_fail_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='flt3_fail_table', border=0)
 
     #read in html base file
     with open('HO_base.html', 'r') as file:
@@ -1303,13 +1335,21 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
     alt_var_modal  = re.sub(r'_modal_table_', f'{alt_html}', alt_var_modal)
     alt_var_modal = re.sub(r'modal-dialog','modal-dialog modal-lg', alt_var_modal)
 
-    ## Add verify_fail_modal here!
     verify_modal_name = 'verify_fail'
     verify_modal_title = 'VerifyBamId fails'
     verify_fail_modal = re.sub(r'_modal_name_', f'{verify_modal_name}', modal_base)  
     verify_fail_modal = re.sub(r'_modal_title_', f'{verify_modal_title}', verify_fail_modal)  
     verify_fail_modal  = re.sub(r'_modal_table_', f'{verify_fail_html}', verify_fail_modal)
-    verify_fail_modal = re.sub(r'modal-dialog','modal-dialog modal-lg', verify_fail_modal)    
+    verify_fail_modal = re.sub(r'modal-dialog','modal-dialog modal-lg', verify_fail_modal)
+
+    flt3_modal_name = 'flt3_fail'
+    flt3_modal_title = 'FLT3 variants'
+    flt3_fail_modal = re.sub(r'_modal_name_', f'{flt3_modal_name}', modal_base)  
+    flt3_fail_modal = re.sub(r'_modal_title_', f'{flt3_modal_title}', flt3_fail_modal)  
+    flt3_fail_modal  = re.sub(r'_modal_table_', f'{flt3_fail_html}', flt3_fail_modal)
+    flt3_fail_modal = re.sub(r'modal-dialog','modal-dialog modal-lg', flt3_fail_modal)
+
+
 
     #Position modals on HTML report
     gene_target_str = r'<td>All samples in this worksheet have genes at &gt;80% 300X.</td>'
@@ -1328,6 +1368,10 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
     verify_target_str = r'<td>Percentage contamination is below 10%.</td>'
     verify_rep_str = f'<td>Percentage contamination is below 10%. {verify_fail_modal}</td>'
     html_report = re.sub(verify_target_str, verify_rep_str, html_report)
+
+    flt3_target_str = r'<td>FLT3 variants are present on the FLT3 tab for samples on this worksheet.</td>'
+    flt3_rep_str = f'<td>FLT3 variants are present on the FLT3 tab for samples on this worksheet. {flt3_fail_modal}</td>'
+    html_report = re.sub(flt3_target_str, flt3_rep_str, html_report)
 
     #small formatting changes to modal
     modal_size_str = '<button type="button" class="btn pull-right" data-toggle="modal" data-target="#alt_variants">Details</button>'
