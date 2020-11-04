@@ -552,7 +552,8 @@ def sort_ho_inputs(panel, ws_1, sample_sheet):
     if sry_xls.empty == True:
         sry_xls = None
     else:
-        sry_xls = os.path.abspath(sry_xls.squeeze())
+        sry_xls = f'{excel_base}' + f'{sry_xls.squeeze()}'
+
     merged_xls = f'{excel_base}' + merged_xls['sample_name'].squeeze()
 
     ho_inp =     {
@@ -801,8 +802,19 @@ def ho_sry_check(ho_inp, ho_check_result_df):
 
     if sry_xls == None:
         sry_check_res = 'FAIL'
+        sry_df = pd.DataFrame()
+
     else:
         sry_check_res = 'PASS'
+
+        ## SRY modal logic... This should be as xlsx output.
+        # xls = pd.ExcelFile(sry_xls)
+        # sry_df = pd.read_excel(xls, 'SRY-Coverage')
+        # sry_df = sry_df[~sry_df['Sample'].str.contains('Neg|NEG')]
+        # sry_df = sry_df[['Sample', 'Gene', 'pct>20x']]
+        # sry_df = sry_df.assign(Sex=lambda sry_df: sry_df['pct>20x']==100).astype(str)
+        # sry_df = sry_df.replace({'True': 'M'})
+        # sry_df = sry_df.replace({'False': 'F'})
 
     ho_check_result_df = ho_check_result_df.append({'Check': sry_check,
                                             'Description': sry_check_des,
@@ -831,7 +843,7 @@ def ho_flt3_check(ho_inp, ho_check_result_df):
                 sample_name = re.search(r'D\d\d-\d{5}', sample)[0]
                 flt3 = flt3_df[['AD','ALT-REF']]   
                 flt3['Sample'] = sample_name
-                flt3 = flt3[['Sample','AD','ALT-REF']]
+                #flt3 = flt3[['Sample','AD','ALT-REF', 'Grouped AR (ALT-REF)', 'Grouped AB (ALT-REF)']]
                 flt3_fail_df = flt3_fail_df.append(flt3, ignore_index=True)
 
         except:
@@ -1260,8 +1272,11 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
     if flt3_fail_df.empty == True:
         flt3_fail_df = pd.DataFrame(columns=['Message'])
         flt3_fail_mess = 'No FLT3 variants have been called.'
-        flt3_fail_df = flt3_fail_df.append({'Message': verify_fail_mess}, ignore_index=True)
-
+        flt3_fail_df = flt3_fail_df.append({'Message': flt3_fail_mess}, ignore_index=True)
+    # if sry_df.empty == True:
+    #     sry_df = pd.DataFrame(columns=['Message'])
+    #     sry_fail_mess = 'No SRY data is available for this worksheet.'
+    #     sry_df = sry_df.append({'Message': sry_fail_mess}, ignore_index=True)
 
     # Create main HTML files from df
     css_classes = ['table', 'table-striped']
@@ -1298,6 +1313,11 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
         flt3_fail_html = flt3_fail_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='flt3_fail_table', border=0)
     else:
         flt3_fail_html = flt3_fail_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='flt3_fail_table', border=0)
+    # if sry_df.shape[1] == 1:
+    #     sry_html = sry_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='sry_table', border=0)
+    # else:
+    #     sry_html = sry_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='sry_table', border=0)
+
 
     #read in html base file
     with open('HO_base.html', 'r') as file:
@@ -1349,7 +1369,12 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
     flt3_fail_modal  = re.sub(r'_modal_table_', f'{flt3_fail_html}', flt3_fail_modal)
     flt3_fail_modal = re.sub(r'modal-dialog','modal-dialog modal-lg', flt3_fail_modal)
 
-
+    # sry_modal_name = 'sry_results'
+    # sry_modal_title = 'SRY results'
+    # sry_modal = re.sub(r'_modal_name_', f'{sry_modal_name}', modal_base)  
+    # sry_modal = re.sub(r'_modal_title_', f'{sry_modal_title}', sry_modal)  
+    # sry_modal  = re.sub(r'_modal_table_', f'{sry_html}', sry_modal)
+    # sry_modal = re.sub(r'modal-dialog','modal-dialog modal-lg', sry_modal)
 
     #Position modals on HTML report
     gene_target_str = r'<td>All samples in this worksheet have genes at &gt;80% 300X.</td>'
@@ -1372,6 +1397,10 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
     flt3_target_str = r'<td>FLT3 variants are present on the FLT3 tab for samples on this worksheet.</td>'
     flt3_rep_str = f'<td>FLT3 variants are present on the FLT3 tab for samples on this worksheet. {flt3_fail_modal}</td>'
     html_report = re.sub(flt3_target_str, flt3_rep_str, html_report)
+
+    # sry_target_str = r'<td>SRY Excel spreadsheet has been produced.</td>'
+    # sry_rep_str = f'<td>SRY Excel spreadsheet has been produced. {sry_modal}</td>'
+    # html_report = re.sub(sry_target_str, sry_rep_str, html_report)
 
     #small formatting changes to modal
     modal_size_str = '<button type="button" class="btn pull-right" data-toggle="modal" data-target="#alt_variants">Details</button>'
