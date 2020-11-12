@@ -841,16 +841,15 @@ def ho_flt3_check(ho_inp, ho_check_result_df):
             flt3_var_list.append(flt3_df.shape[0])
             if not flt3_df.empty:
                 sample_name = re.search(r'D\d\d-\d{5}', sample)[0]
-                flt3 = flt3_df[['AD','ALT-REF']]   
-                flt3['Sample'] = sample_name
-                #flt3 = flt3[['Sample','AD','ALT-REF', 'Grouped AR (ALT-REF)', 'Grouped AB (ALT-REF)']]
-                flt3_fail_df = flt3_fail_df.append(flt3, ignore_index=True)
 
+                flt3 = flt3_df[['AD','ALT-REF', 'Grouped AR (ALT-REF)','Grouped AB (ALT-REF)']]   
+                flt3['Sample'] = sample_name
+                flt3_fail_df = flt3_fail_df.append(flt3, ignore_index=True, sort=True)
         except:
             flt3_check_res = 'N/A'
 
+    flt3_fail_df = flt3_fail_df[['Sample','AD','ALT-REF', 'Grouped AR (ALT-REF)','Grouped AB (ALT-REF)']]  
     flt3_fail_df = flt3_fail_df.sort_values(by=['Sample'])
-
     worksheet = ho_inp['worksheet']
     flt3_check = 'FLT3 variant check'
     flt3_check_des = f'FLT3 variants are present on the FLT3 tab for samples on this worksheet.'
