@@ -968,6 +968,8 @@ def ho_neg_summary_table(ho_inp):
     alt_var = alt_var_df.shape[0]
     alt_var_res = f'{alt_var} calls >= 10 alt reads'
 
+
+
     ho_neg_table_df = ho_neg_table_df.append({'Singletons': singleton_res,
                                             'ALT reads': alt_var_res,
                                             }, ignore_index=True) 
@@ -1027,7 +1029,7 @@ def ho_summary_xls(exon_dict, gene_dict, alt_df):
     wb = Workbook()
     failed_exon_ws = wb.active
     failed_exon_ws.title = 'Failed Exons'
-    failed_gene_ws = wb.create_sheet('Low coverage genes')
+    failed_gene_ws = wb.create_sheet('Failed genes')
     alt_ws = wb.create_sheet('ALT reads >10')
     exon_header_list = ['Sample', 'Gene', 'Exon','PCT<100x']
     gene_header_list = ['Sample', 'Gene','PCT<300X']
@@ -1210,14 +1212,14 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
         modal_base = file.read()
 
     #Add table to modal
-    gene_modal_name = 'Failed_genes'
-    gene_modal_title = 'Failed genes'
+    gene_modal_name = 'Low_coverage_genes'
+    gene_modal_title = 'Low coverage genes'
     failed_gene_modal = re.sub(r'_modal_name_', f'{gene_modal_name}', modal_base)  
     failed_gene_modal = re.sub(r'_modal_title_', f'{gene_modal_title}', failed_gene_modal)  
     failed_gene_modal  = re.sub(r'_modal_table_', f'{gene_html}', failed_gene_modal)  
 
-    exon_modal_name = 'Failed_exons'
-    exon_modal_title = 'Failed exons'
+    exon_modal_name = 'Low_coverage_exons'
+    exon_modal_title = 'Low coverage exons'
     failed_exon_modal = re.sub(r'_modal_name_', f'{exon_modal_name}', modal_base)  
     failed_exon_modal = re.sub(r'_modal_title_', f'{exon_modal_title}', failed_exon_modal)  
     failed_exon_modal  = re.sub(r'_modal_table_', f'{exon_html}', failed_exon_modal) 
