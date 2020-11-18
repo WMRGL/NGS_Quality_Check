@@ -703,10 +703,13 @@ def ho_neg_checks(ho_inp, ho_check_result_df):
     max_row_exon = max_row_exon[['Gene', 'Exon', 'Max']]
 
     #Calculate adjusted sensitivity required
-    sens_cov = 200
-    neg_sens = max_num_exons + sens_cov
-    sens_cal = 10 / neg_sens * 100
-    sensitivity = str(round(sens_cal, 2)) + '%'
+    if max_num_exons <= 30:
+        sensitivity = '5%'
+    else:
+        sens_cov = 200
+        neg_sens = max_num_exons + sens_cov
+        sens_cal = 10 / neg_sens * 100
+        sensitivity = str(round(sens_cal, 2)) + '%'
 
     max_row_exon['Sensitivity'] = sensitivity
 
