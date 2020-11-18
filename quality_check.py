@@ -779,8 +779,7 @@ def verifybamid_check(ho_inp, ho_check_result_df):
     verifybamid_df['%CONT'] = verifybamid_df['%CONT'].astype(float)
     verifybamid_df = verifybamid_df[['SAMPLE','%CONT']]
     verify_fail_df = verifybamid_df[verifybamid_df['%CONT'] > 10.0]
-
-
+    verify_fail_df = verify_fail_df.replace(to_replace=r'.*(D\d\d-\d{5}).*', value=r'\1', regex=True)
     ho_check_result_df = ho_check_result_df.append({'Check': verifybamid_check,
                                             'Description': verifybamid_check_des,
                                             'Result': verifybamid_res,
