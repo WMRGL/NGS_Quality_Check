@@ -1027,7 +1027,7 @@ def ho_summary_xls(exon_dict, gene_dict, alt_df):
     wb = Workbook()
     failed_exon_ws = wb.active
     failed_exon_ws.title = 'Failed Exons'
-    failed_gene_ws = wb.create_sheet('Failed genes')
+    failed_gene_ws = wb.create_sheet('Low coverage genes')
     alt_ws = wb.create_sheet('ALT reads >10')
     exon_header_list = ['Sample', 'Gene', 'Exon','PCT<100x']
     gene_header_list = ['Sample', 'Gene','PCT<300X']
