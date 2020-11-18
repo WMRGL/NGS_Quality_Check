@@ -806,15 +806,6 @@ def ho_sry_check(ho_inp, ho_check_result_df):
     else:
         sry_check_res = 'PASS'
 
-        ## SRY modal logic... This should be as xlsx output.
-        # xls = pd.ExcelFile(sry_xls)
-        # sry_df = pd.read_excel(xls, 'SRY-Coverage')
-        # sry_df = sry_df[~sry_df['Sample'].str.contains('Neg|NEG')]
-        # sry_df = sry_df[['Sample', 'Gene', 'pct>20x']]
-        # sry_df = sry_df.assign(Sex=lambda sry_df: sry_df['pct>20x']==100).astype(str)
-        # sry_df = sry_df.replace({'True': 'M'})
-        # sry_df = sry_df.replace({'False': 'F'})
-
     ho_check_result_df = ho_check_result_df.append({'Check': sry_check,
                                             'Description': sry_check_des,
                                             'Result': sry_check_res,
@@ -977,12 +968,6 @@ def ho_neg_summary_table(ho_inp):
     alt_var = alt_var_df.shape[0]
     alt_var_res = f'{alt_var} calls >= 10 alt reads'
 
-    # # TODO this is duplicated from Neg check
-    # neg_xls_path = ho_inp['negative']
-    # neg_xls = pd.ExcelFile(ho_inp['negative'])
-    # neg_exon_df = pd.read_excel(neg_xls, 'Coverage-exon')
-    # max_num_exons = neg_exon_df['Max'].max()
-
     ho_neg_table_df = ho_neg_table_df.append({'Singletons': singleton_res,
                                             'ALT reads': alt_var_res,
                                             }, ignore_index=True) 
@@ -996,20 +981,6 @@ def ho_merged_var_xls(ho_inp):
     '''
     xls = pd.ExcelFile(ho_inp['merged_variant_xls'])
     merged_df = pd.read_excel(xls, 'Variants-all-data')
-
-    # wb = load_workbook(ho_inp['merged_variant_xls'])
-    # ws = wb.get_sheet_by_name('Variants-all-data')
-    # x = ws.max_row
-    # y = 2
-    # Itterating through the xlxs in reverse order and deleting out rows
-    # This must be in reverse order as when a row is deleted the indicies is updated
-    # deleting in a reverse order stops this from impacting which row you are deleting
-    # for r in range(1,x+1):
-    #     d = ws.cell(row=x+1-r,column=2)
-    #     if 'NEG' in str(d.value):   
-    #         ws.delete_rows(x+1-r)
-    # wb.save("test_1.xlsx")
-    #singleton = variants_all_df[variants_all_df['FILTER'].str.contains('singleton')].shape[0]
 
     merged_vars_df = merged_df[~merged_df['SAMPLE'].str.contains('NEG|neg')]
     merged_ab_df = merged_vars_df['AB']
@@ -1150,93 +1121,6 @@ def ho_summary_xls(exon_dict, gene_dict, alt_df):
     return [failed_exon_df, failed_gene_df, alt_df] 
 
 
-    # Create a Pandas Excel writer using XlsxWriter as the engine.
-    # filename = 'test_output_script'
-    # writer = pd.ExcelWriter(f'{filename}.xlsx', engine='xlsxwriter')
-    # Write each dataframe to a different worksheet.
-
-    '''
-    create new df {dnum: {gene_info: [gene, pct>300],
-                          exon_info: [gene, exon, pct>100]}}
-    '''
-    # new_dict = {}
-    # value_list = [] 
-    
-    # print('starting convert')
-    # for k,v in cov_df.items():
-    #     # example gene_df 
-    #     # If a sample has > 
-    #     if len(v[0]['sample_name']) > 1:
-    #         samples = v[0]
-    #         for a,b in samples.items():
-    #             for e,i in b.items():
-    #                 if type(i) == str:
-    #                     dnum = i
-    #                 else:
-    #                     values = i.to_csv(index=False, header=None)
-    #                     value_list.append(values)
-    #                     new_dict["dnum"] = dnum
-    #                     new_dict[f"{k}"] = value_list
-
-    #                     print(new_dict)
-
-    #     else:
-    #         sample = v[0]['sample_name']
-    #print(new_dict)
-
-                # v[0][k] is a series of 
-                #for e in v[0][k]:
-
- 
-
-    #     # a series (list) of data frames containing gene/exon vals
-    #     for i in v[0][k]:
-    #         if len(i) > 1:
-    #             print(k)
-    #             print(sample)
-    #             print(i.to_csv(index=False, header=None))
-    #             #result_list = v[0][k].squeeze().to_list()
-    #         else:
-    #             pass
-    #             #result_list = v[0][k].squeeze()
-
-
-    '''
-
-           cov_df{
-                gene: gene_df{
-                    sample_name: Dnum,
-                    gene_df: cov_gene_fail{
-                        Gene: gene_name, 
-                        pct>300x: value
-                        },
-                exon: exon_df{
-                    sample_name: Dnum,
-                    exon_df: cov_exon_fail{
-                        Gene: gene,
-                        Exon: exon_num,
-                        pct>100x: pct_cov
-                        }
-                        }
-                    }
-                }
-
-    '''
-
-
-    #cov_df['gene_df'][0].to_excel(writer, sheet_name='Failed_gene_cov', index=False)
-    #cov_df['exon_df'][0].to_excel(writer, sheet_name='Failed_exons_cov', index=False)
-
-    # Close the Pandas Excel writer and output the Excel file.
-    #writer.save()
-        
-    # filename = "summary_out.xlsx"
-    # wb = Workbook()
-    # wb.create_sheet('>10_ALT_variants', 0)
-    # wb.create_sheet('Failed_genes_cov', 1)
-    # wb.create_sheet('Failed_exons_cov', 2)
-    # wb.save(filename)
-
 def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file_df, max_exon_df, exon_df, gene_df, alt_df, verify_fail_df, flt3_fail_df):
     '''
     Creating a static HTML file to display the results to the Clinical Scientist reviewing the quality check report.
@@ -1271,10 +1155,6 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
         flt3_fail_df = pd.DataFrame(columns=['Message'])
         flt3_fail_mess = 'No FLT3 variants have been called.'
         flt3_fail_df = flt3_fail_df.append({'Message': flt3_fail_mess}, ignore_index=True)
-    # if sry_df.empty == True:
-    #     sry_df = pd.DataFrame(columns=['Message'])
-    #     sry_fail_mess = 'No SRY data is available for this worksheet.'
-    #     sry_df = sry_df.append({'Message': sry_fail_mess}, ignore_index=True)
 
     # Create main HTML files from df
     css_classes = ['table', 'table-striped']
@@ -1311,10 +1191,6 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
         flt3_fail_html = flt3_fail_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='flt3_fail_table', border=0)
     else:
         flt3_fail_html = flt3_fail_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='flt3_fail_table', border=0)
-    # if sry_df.shape[1] == 1:
-    #     sry_html = sry_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='sry_table', border=0)
-    # else:
-    #     sry_html = sry_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='sry_table', border=0)
 
 
     #read in html base file
@@ -1367,12 +1243,6 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
     flt3_fail_modal  = re.sub(r'_modal_table_', f'{flt3_fail_html}', flt3_fail_modal)
     flt3_fail_modal = re.sub(r'modal-dialog','modal-dialog modal-lg', flt3_fail_modal)
 
-    # sry_modal_name = 'sry_results'
-    # sry_modal_title = 'SRY results'
-    # sry_modal = re.sub(r'_modal_name_', f'{sry_modal_name}', modal_base)  
-    # sry_modal = re.sub(r'_modal_title_', f'{sry_modal_title}', sry_modal)  
-    # sry_modal  = re.sub(r'_modal_table_', f'{sry_html}', sry_modal)
-    # sry_modal = re.sub(r'modal-dialog','modal-dialog modal-lg', sry_modal)
 
     #Position modals on HTML report
     gene_target_str = r'<td>All samples in this worksheet have genes at &gt;80% 300X.</td>'
@@ -1395,10 +1265,6 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
     flt3_target_str = r'<td>FLT3 variants are present on the FLT3 tab for samples on this worksheet.</td>'
     flt3_rep_str = f'<td>FLT3 variants are present on the FLT3 tab for samples on this worksheet. {flt3_fail_modal}</td>'
     html_report = re.sub(flt3_target_str, flt3_rep_str, html_report)
-
-    # sry_target_str = r'<td>SRY Excel spreadsheet has been produced.</td>'
-    # sry_rep_str = f'<td>SRY Excel spreadsheet has been produced. {sry_modal}</td>'
-    # html_report = re.sub(sry_target_str, sry_rep_str, html_report)
 
     #small formatting changes to modal
     modal_size_str = '<button type="button" class="btn pull-right" data-toggle="modal" data-target="#alt_variants">Details</button>'
