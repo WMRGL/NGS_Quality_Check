@@ -1221,8 +1221,8 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
     failed_gene_modal = re.sub(r'_modal_title_', f'{gene_modal_title}', failed_gene_modal)  
     failed_gene_modal  = re.sub(r'_modal_table_', f'{gene_html}', failed_gene_modal)  
 
-    exon_modal_name = 'Low_coverage_exons'
-    exon_modal_title = 'Low coverage exons'
+    exon_modal_name = 'Failed_exons'
+    exon_modal_title = 'Failed exons'
     failed_exon_modal = re.sub(r'_modal_name_', f'{exon_modal_name}', modal_base)  
     failed_exon_modal = re.sub(r'_modal_title_', f'{exon_modal_title}', failed_exon_modal)  
     failed_exon_modal  = re.sub(r'_modal_table_', f'{exon_html}', failed_exon_modal) 
