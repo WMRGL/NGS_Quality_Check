@@ -295,8 +295,8 @@ def generate_html_output(check_result_df, run_details_df, panel, bed_1, bed_2):
     check_details = check_result_df.to_html(index=False, justify='left')
 
     report_head = f'<h1>{panel} Quality Report</h1>'
-    run_sub = '<h2>Run details<h2/>'
-    check_sub = '<h2>Checks<h2/>'
+    run_sub = '<h2>Pipeline checks<h2/>'
+    check_sub = '<h2>QC summary<h2/>'
     html = f'<!DOCTYPE html><html><head>{style}</head><body>{report_head}{run_sub}{run_details}{check_sub}{check_details}</body></hml>'
 
     # Add class to PASS/FAIL to colour code
@@ -478,18 +478,25 @@ def ho_main(panel, ws_1, sample_sheet):
     3. Run 9 independent checks and create output df
 
     '''
+    ho_check_result_df = pd.DataFrame(columns=['Worksheet','Check', 'Description','Result'])    
+    ho_check_pac_df = pd.DataFrame(columns=['Worksheet','Check', 'Description','Result']) 
 
     result_files = sort_ho_inputs(panel, ws_1, sample_sheet)
     run_details_df = run_details_ho(result_files)
+    run_details_check_df, file_size_df = ho_vcf_check(result_files, ho_check_result_df)
 
     #create df and add results for each check
-    ho_check_result_df = pd.DataFrame(columns=[ 'Worksheet','Check', 'Description','Result'])    
-    ho_check_result_df, file_size_df = ho_vcf_check(result_files, ho_check_result_df)
+    #ho_check_result_df = pd.DataFrame(columns=[ 'Worksheet','Check', 'Description','Result'])    
+    #ho_check_result_df, file_size_df = ho_vcf_check(result_files, ho_check_result_df)
     ho_check_result_df, max_row_exon_df, ho_neg_table_df, alt_var_df = ho_neg_checks(result_files, ho_check_result_df)
     ho_check_result_df, verify_fail_df = verifybamid_check(result_files, ho_check_result_df)
     ho_check_result_df = ho_sry_check(result_files, ho_check_result_df)
-    ho_check_result_df, flt3_fail_df = ho_flt3_check(result_files, ho_check_result_df)
-    ho_check_result_df, exon_dict, gene_dict = ho_coverage_check(result_files, ho_check_result_df)
+    
+    #ho_check_result_df, flt3_fail_df = ho_flt3_check(result_files, ho_check_result_df)
+    #ho_check_result_df, exon_dict, gene_dict = ho_coverage_check(result_files, ho_check_result_df)
+
+    ho_check_pac_df, flt3_fail_df = ho_flt3_check(result_files, ho_check_pac_df)
+    ho_check_pac_df, exon_dict, gene_dict = ho_coverage_check(result_files, ho_check_pac_df)
 
     #transpose
     file_size_df = file_size_df.transpose()
@@ -509,7 +516,9 @@ def ho_main(panel, ws_1, sample_sheet):
         gene_df,
         alt_df,
         verify_fail_df,
-        flt3_fail_df
+        flt3_fail_df,
+        run_details_check_df,
+        ho_check_pac_df
         )
 
 
@@ -585,13 +594,17 @@ def run_details_ho(ho_inp):
     pipe_term = r'Pipeline\scommand:\n\/opt\/scripts\/MiSeq-Universal-(v[\.]?\d\.\d\.\d)\/MiSeq-master-pipeline.py'
     exp_name = re.search(exp_term, cmd_text).group(2)
     pipe_version = re.search(pipe_term, cmd_text).group(1)
+    check_title = 'Run details'
+    run_details_des = 'Manual check of the worksheet number, panel, pipeline version and experiment name.'
 
-    ho_run_details_df = pd.DataFrame(columns=['Worksheet', 'Panel', 'Pipeline version', 'Experiment name'])
+    ho_run_details_df = pd.DataFrame(columns=['Worksheet', 'Check','Panel', 'Pipeline version', 'Experiment name', 'Description'])
 
     ho_details_df = ho_run_details_df.append({'Worksheet': worksheet,
+                                            'Check': check_title,
                                             'Panel': panel,
                                             'Pipeline version': pipe_version,
-                                            'Experiment name': exp_name
+                                            'Experiment name': exp_name,
+                                            'Description': run_details_des
                                             }, ignore_index=True)
 
     return ho_details_df
@@ -603,6 +616,7 @@ def ho_vcf_check(ho_inp, ho_check_result_df):
 
     TODO check that the index value of 20 does not change between samplesheets!
     '''
+
     sample_sheet_path = ho_inp['sample_sheet']
     vcf_dir_path = ho_inp['vcf_directory']
     sample_sheet_xls = pd.read_csv(sample_sheet_path)
@@ -641,10 +655,19 @@ def ho_vcf_check(ho_inp, ho_check_result_df):
     else:
         vcf_check_res = 'PASS'
 
+    #Addition of new columns to combine with Pipeline Checks 
+    # TODO remove duplcated code
+    panel = ho_inp['panel']
+    cmd = ho_inp['cmd_log_file']
+    worksheet = ho_inp['worksheet']
+    with open(cmd, 'r') as file:
+        cmd_text = file.read()
+
     ho_check_result_df = ho_check_result_df.append({'Check': vcf_check,
                                             'Description': vcf_check_des,
                                             'Result': vcf_check_res,
-                                            'Worksheet': worksheet}, ignore_index=True)
+                                            'Worksheet': worksheet }, ignore_index=True)
+
 
     return ho_check_result_df, file_size_df
 
@@ -711,8 +734,6 @@ def ho_neg_checks(ho_inp, ho_check_result_df):
         sens_cal = 10 / neg_sens * 100
         sensitivity = str(round(sens_cal, 2)) + '%'
 
-    max_row_exon['Sensitivity'] = sensitivity
-
     # If more than 1 exon has the same max value select the first
     if len(max_row_exon) > 1:
         max_row_exon = max_row_exon[:1]
@@ -734,7 +755,9 @@ def ho_neg_checks(ho_inp, ho_check_result_df):
         neg_zero_res = 'FAIL'
 
     ## singleton and num ATL reads (inc details button)
-    ho_neg_table_df, alt_var_df = ho_neg_summary_table(ho_inp)
+    ho_neg_table_df, alt_var_df, alt_var = ho_neg_summary_table(ho_inp)
+    sensitivity = f'Max reads in negative = {max_num_exons}. Analyse to {sensitivity}'
+    max_row_exon['Sensitivity'] = sensitivity
 
 
     ho_check_result_df = ho_check_result_df.append({'Check': neg_exon_check,
@@ -844,7 +867,7 @@ def ho_flt3_check(ho_inp, ho_check_result_df):
     flt3_fail_df = flt3_fail_df[['Sample','AD','ALT-REF', 'Grouped AR (ALT-REF)','Grouped AB (ALT-REF)']]  
     flt3_fail_df = flt3_fail_df.sort_values(by=['Sample'])
     worksheet = ho_inp['worksheet']
-    flt3_check = 'FLT3 variant check'
+    flt3_check = 'FLT3 ITD check'
     flt3_check_des = f'FLT3 variants are present on the FLT3 tab for samples on this worksheet.'
 
     if not flt3_var_list:
@@ -978,7 +1001,7 @@ def ho_neg_summary_table(ho_inp):
                                             }, ignore_index=True) 
 
 
-    return [ho_neg_table_df, alt_var_df]
+    return [ho_neg_table_df, alt_var_df, alt_var]
 
 def ho_merged_var_xls(ho_inp):
     '''
@@ -1126,7 +1149,7 @@ def ho_summary_xls(exon_dict, gene_dict, alt_df):
     return [failed_exon_df, failed_gene_df, alt_df] 
 
 
-def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file_df, max_exon_df, exon_df, gene_df, alt_df, verify_fail_df, flt3_fail_df):
+def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file_df, max_exon_df, exon_df, gene_df, alt_df, verify_fail_df, flt3_fail_df, run_details_check_df, ho_check_pac_df):
     '''
     Creating a static HTML file to display the results to the Clinical Scientist reviewing the quality check report.
     This process involves changes directly to the html. TODO find replacement method to edit html.
@@ -1161,14 +1184,22 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
         flt3_fail_mess = 'No FLT3 variants have been called.'
         flt3_fail_df = flt3_fail_df.append({'Message': flt3_fail_mess}, ignore_index=True)
 
-    # Create main HTML files from df
     css_classes = ['table', 'table-striped']
 
     run_details_html = run_details_df.to_html(classes= css_classes, table_id='run_details_table', index=False, justify='left', border=0)
+    run_details_check_html = run_details_check_df.to_html(classes= css_classes, table_id='run_details_check_table', index=False, justify='left', border=0)
     check_results_html = check_results_df.to_html(classes= css_classes, table_id='check_table', index=False, justify='left', border=0)
+    check_results_pac_html = ho_check_pac_df.to_html(classes= css_classes, table_id='check_pac_table', index=False, justify='left', border=0)
+
     # Add green and red colouring to PASS/FAIL
     check_results_html = re.sub(r"<td>PASS</td>",r"<td style='color:green;'>PASS</td>", check_results_html)
     check_results_html = re.sub(r"<td>FAIL</td>",r"<td style='color:red;'>FAIL</td>", check_results_html)
+    run_details_check_html = re.sub(r"<td>PASS</td>",r"<td style='color:green;'>PASS</td>", run_details_check_html)
+    run_details_check_html = re.sub(r"<td>FAIL</td>",r"<td style='color:red;'>FAIL</td>", run_details_check_html)
+    check_results_pac_html = re.sub(r"<td>PASS</td>",r"<td style='color:green;'>PASS</td>",check_results_pac_html)
+    check_results_pac_html = re.sub(r"<td>FAIL</td>",r"<td style='color:red;'>FAIL</td>", check_results_pac_html)
+
+
     neg_details_html = neg_table_df.to_html(classes= css_classes ,table_id='neg_table', index=False, justify='left', border=0)
 
     #create addition HTML files from df. These are the non-modal tables
@@ -1204,11 +1235,14 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
 
     # Subbing in text to replace placeholders    
     base = re.sub(r'{run_details_html}', f'{run_details_html}', base)
+    base = re.sub(r'{run_details_check_html}', f'{run_details_check_html}', base)
     base = re.sub(r'{check_results_html}', f'{check_results_html}', base) 
+    base = re.sub(r'{check_results_pac_html}', f'{check_results_pac_html}', base) 
     base = re.sub(r'_vcf_min_max_', f'{file_size_html}', base)
     base = re.sub(r'_neg_exon_depth_', f'{max_exon_html}', base)  
     base = re.sub(r'_neg_zero_', f'{neg_details_html}', base) 
     html_report = base
+
 
     #get modal template
     with open('modal_base.html') as file:
