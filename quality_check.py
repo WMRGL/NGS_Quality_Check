@@ -478,47 +478,36 @@ def ho_main(panel, ws_1, sample_sheet):
     3. Run 9 independent checks and create output df
 
     '''
-    ho_check_result_df = pd.DataFrame(columns=['Worksheet','Check', 'Description','Result'])    
-    ho_check_pac_df = pd.DataFrame(columns=['Worksheet','Check', 'Description','Result']) 
+    ho_check_df = pd.DataFrame(columns=['Worksheet','Check', 'Description','Result'])    
 
+    # Pipeline checks run details
     result_files = sort_ho_inputs(panel, ws_1, sample_sheet)
     run_details_df = run_details_ho(result_files)
-    run_details_check_df, file_size_df = ho_vcf_check(result_files, ho_check_result_df)
-
-    #create df and add results for each check
-    #ho_check_result_df = pd.DataFrame(columns=[ 'Worksheet','Check', 'Description','Result'])    
-    #ho_check_result_df, file_size_df = ho_vcf_check(result_files, ho_check_result_df)
-    ho_check_result_df, max_row_exon_df, ho_neg_table_df, alt_var_df = ho_neg_checks(result_files, ho_check_result_df)
-    ho_check_result_df, verify_fail_df = verifybamid_check(result_files, ho_check_result_df)
-    ho_check_result_df = ho_sry_check(result_files, ho_check_result_df)
-    
-    #ho_check_result_df, flt3_fail_df = ho_flt3_check(result_files, ho_check_result_df)
-    #ho_check_result_df, exon_dict, gene_dict = ho_coverage_check(result_files, ho_check_result_df)
-
-    ho_check_pac_df, flt3_fail_df = ho_flt3_check(result_files, ho_check_pac_df)
-    ho_check_pac_df, exon_dict, gene_dict = ho_coverage_check(result_files, ho_check_pac_df)
-
-    #transpose
+    # Pipeline check results
+    pipeline_check_df, file_size_df = ho_vcf_check(result_files, ho_check_df)
+    # QC summary check results
+    qcs_result_df, max_row_exon_df, ho_neg_table_df, alt_df = ho_neg_checks(result_files, ho_check_df)
+    qcs_result_df, verify_fail_df = verifybamid_check(result_files, qcs_result_df)
+    qcs_result_df = ho_sry_check(result_files, qcs_result_df)
+    # Pre analysis checks results 
+    pac_result_df, flt3_fail_df = ho_flt3_check(result_files, ho_check_df)
+    pac_result_df, exon_fail_df, gene_fail_df = ho_coverage_check(result_files, pac_result_df)
     file_size_df = file_size_df.transpose()
     max_row_exon_df = max_row_exon_df.transpose()
-
-    #TODO review this logic
-    #ho_merged_var_xls(result_files)
-    exon_df, gene_df, alt_df = ho_summary_xls(exon_dict, gene_dict, alt_var_df)
+    
+    # Additional info used in modals and sub tables
+    extra_info_dict = [
+        ho_neg_table_df, file_size_df, max_row_exon_df,
+        exon_fail_df, gene_fail_df, alt_df, 
+        verify_fail_df, flt3_fail_df
+        ]
 
     ho_generate_html_output(
         run_details_df,
-        ho_check_result_df,
-        ho_neg_table_df,
-        file_size_df,
-        max_row_exon_df,
-        exon_df,
-        gene_df,
-        alt_df,
-        verify_fail_df,
-        flt3_fail_df,
-        run_details_check_df,
-        ho_check_pac_df
+        qcs_result_df,
+        pipeline_check_df,
+        pac_result_df, 
+        extra_info_dict
         )
 
 
@@ -609,7 +598,7 @@ def run_details_ho(ho_inp):
 
     return ho_details_df
 
-def ho_vcf_check(ho_inp, ho_check_result_df):
+def ho_vcf_check(ho_inp, qcs_result_df):
     '''
     A check to determine if the number of VCFs generated
     is 2x the number of samples in the sample sheet
@@ -663,13 +652,13 @@ def ho_vcf_check(ho_inp, ho_check_result_df):
     with open(cmd, 'r') as file:
         cmd_text = file.read()
 
-    ho_check_result_df = ho_check_result_df.append({'Check': vcf_check,
+    qcs_result_df = qcs_result_df.append({'Check': vcf_check,
                                             'Description': vcf_check_des,
                                             'Result': vcf_check_res,
                                             'Worksheet': worksheet }, ignore_index=True)
 
 
-    return ho_check_result_df, file_size_df
+    return qcs_result_df, file_size_df
 
 
 def convert_unit(size_in_bytes, unit='KB'):
@@ -686,7 +675,7 @@ def convert_unit(size_in_bytes, unit='KB'):
     else:
         return str(size_in_bytes) + ' B'
 
-def ho_neg_checks(ho_inp, ho_check_result_df):
+def ho_neg_checks(ho_inp, qcs_result_df):
     '''
     Completes 3 checks on the negative excel file: 
     1) Number of exons present in the negative excel file (coverage-exon tab)
@@ -755,29 +744,29 @@ def ho_neg_checks(ho_inp, ho_check_result_df):
         neg_zero_res = 'FAIL'
 
     ## singleton and num ATL reads (inc details button)
-    ho_neg_table_df, alt_var_df, alt_var = ho_neg_summary_table(ho_inp)
+    ho_neg_table_df, alt_df, alt_var = ho_neg_summary_table(ho_inp)
     sensitivity = f'Max reads in negative = {max_num_exons}. Analyse to {sensitivity}'
     max_row_exon['Sensitivity'] = sensitivity
 
 
-    ho_check_result_df = ho_check_result_df.append({'Check': neg_exon_check,
+    qcs_result_df = qcs_result_df.append({'Check': neg_exon_check,
                                             'Description': neg_exon_check_des,
                                             'Result': neg_exon_res,
                                             'Worksheet': worksheet}, ignore_index=True)
    
-    ho_check_result_df = ho_check_result_df.append({'Check': neg_depth_check,
+    qcs_result_df = qcs_result_df.append({'Check': neg_depth_check,
                                             'Description': neg_depth_check_des,
                                             'Result': neg_depth_res,
                                             'Worksheet': worksheet}, ignore_index=True)
 
-    ho_check_result_df = ho_check_result_df.append({'Check': neg_zero_check,
+    qcs_result_df = qcs_result_df.append({'Check': neg_zero_check,
                                             'Description': neg_zero_check_des,
                                             'Result': neg_zero_res,
                                             'Worksheet': worksheet}, ignore_index=True)
 
-    return ho_check_result_df, max_row_exon, ho_neg_table_df, alt_var_df
+    return qcs_result_df, max_row_exon, ho_neg_table_df, alt_df
 
-def verifybamid_check(ho_inp, ho_check_result_df):
+def verifybamid_check(ho_inp, qcs_result_df):
     '''
     Checks the verifybamid tab to ensure samples do not exceed contamination 10% threshold.
     '''
@@ -806,14 +795,14 @@ def verifybamid_check(ho_inp, ho_check_result_df):
     verifybamid_df = verifybamid_df[['SAMPLE','%CONT']]
     verify_fail_df = verifybamid_df[verifybamid_df['%CONT'] > 10.0]
     verify_fail_df = verify_fail_df.replace(to_replace=r'.*(D\d\d-\d{5}).*', value=r'\1', regex=True)
-    ho_check_result_df = ho_check_result_df.append({'Check': verifybamid_check,
+    qcs_result_df = qcs_result_df.append({'Check': verifybamid_check,
                                             'Description': verifybamid_check_des,
                                             'Result': verifybamid_res,
                                             'Worksheet': worksheet}, ignore_index=True)
 
-    return ho_check_result_df, verify_fail_df
+    return qcs_result_df, verify_fail_df
 
-def ho_sry_check(ho_inp, ho_check_result_df):
+def ho_sry_check(ho_inp, qcs_result_df):
     '''
     Check for the presence of an SRY output xls.
     '''
@@ -832,14 +821,14 @@ def ho_sry_check(ho_inp, ho_check_result_df):
     else:
         sry_check_res = 'PASS'
 
-    ho_check_result_df = ho_check_result_df.append({'Check': sry_check,
+    qcs_result_df = qcs_result_df.append({'Check': sry_check,
                                             'Description': sry_check_des,
                                             'Result': sry_check_res,
                                             'Worksheet': worksheet}, ignore_index=True) 
 
-    return ho_check_result_df
+    return qcs_result_df
 
-def ho_flt3_check(ho_inp, ho_check_result_df):
+def ho_flt3_check(ho_inp, qcs_result_df):
     '''
     If any variants are present on FLT3 tab then the check will pass
     #TODO handle cases where no FLT3 tab is present
@@ -881,74 +870,44 @@ def ho_flt3_check(ho_inp, ho_check_result_df):
             raise Exception("Error- Check FLT3 tabs!")
 
 
-    ho_check_result_df = ho_check_result_df.append({'Check': flt3_check,
+    qcs_result_df = qcs_result_df.append({'Check': flt3_check,
                                             'Description': flt3_check_des,
                                             'Result': flt3_check_res,
                                             'Worksheet': worksheet}, ignore_index=True) 
 
-    return ho_check_result_df, flt3_fail_df
+    return qcs_result_df, flt3_fail_df
 
-def ho_coverage_check(ho_inp, ho_check_result_df):
+def ho_coverage_check(ho_inp, qcs_result_df): 
     '''
-    Checks coverage is > 80% 300X (coverage-gene)
-    Checks coverage is == 100% 100X (coverage-exon)
-
-    Collect exon and gene fails for excel spreadsheet.
-    data stored in a dictionary:
-        exon failed dict:
-        {dnum: '<gene>,<exon_num>,<pct_cov>'}
-        gene failed dict:
-        {dnum: '<gene><pct_cov'}
+    1. merge all gene coverage and exon coverage in one
+    2. check if >80%  and 100% for coverage-gene and coverage-exon PASS/FAIL
+    3. Return gene and exon fails as df
     '''
-
     sample_list = ho_inp['pat_results']
-
-    cov_df = pd.DataFrame(columns=[ 'gene_df','exon_df'])
-    acu_gene_df = pd.DataFrame(columns=['sample_name','gene_df'])
-    acu_exon_df = pd.DataFrame(columns=['sample_name','exon_df'])
-
-    exon_dict = {}
-    gene_dict = {}
-
-    gene_fail_list = []
-    exon_fail_list = [] 
-    # coverage-gene tab    
+    gene_cov_data = []
+    exon_cov_data = []
     for sample in sample_list:
-        xls = pd.ExcelFile(sample)
-        gene_cov_df = pd.read_excel(xls, 'Coverage-gene')
-        exon_cov_df = pd.read_excel(xls, 'Coverage-exon')
+        gene_cov_df = pd.read_excel(sample, 'Coverage-gene')
+        gene_cov_df = gene_cov_df[['Sample','Gene','pct>300x']]
+        gene_cov_data.append(gene_cov_df)
 
-        #Coverage-gene tab
-        if gene_cov_df['pct>300x'].min() < 79.5:
-            gene_fail_list.append(sample)
+        exon_cov_df = pd.read_excel(sample, 'Coverage-exon')
+        exon_cov_df = exon_cov_df[['Sample','Gene','Exon','pct>100x']]
 
-        #Coverage-exon tab
-        if exon_cov_df['pct>100x'].min() < 100:
-            exon_fail_list.append(sample)
+        gene_cov_data.append(gene_cov_df)
+        exon_cov_data.append(exon_cov_df)
 
-        sample_name = re.search(r'D\d\d-\d{5}', sample)[0]
-        cov_gene_300x_df = gene_cov_df[['Gene','pct>300x']]
-        cov_exon_100x_df = exon_cov_df[['Gene', 'Exon', 'pct>100x']]
-        cov_gene_fail = cov_gene_300x_df.loc[cov_gene_300x_df['pct>300x'] < 79.5]
-        cov_exon_fail = cov_exon_100x_df.loc[cov_exon_100x_df['pct>100x'] < 100]
-
-        exon_dets = cov_exon_fail.to_csv(index=False, header=None)
-        gene_dets = cov_gene_fail.to_csv(index=False, header=None)
-
-        # only add to dict if the failed exon/genes are pres
-        if len(exon_dets) != 0:
-            exon_dets = exon_dets.strip()
-            exon_dict[sample_name] = exon_dets
-        if len(gene_dets) != 0:
-            gene_dets = gene_dets.strip()
-            gene_dict[sample_name] = gene_dets
+    ws_gene_cov_df = pd.concat(gene_cov_data, ignore_index=True)
+    ws_exon_cov_df = pd.concat(exon_cov_data, ignore_index=True)
+    gene_fail_df = ws_gene_cov_df[ws_gene_cov_df['pct>300x'] < 80].sort_values(by='Sample')
+    exon_fail_df = ws_exon_cov_df[ws_exon_cov_df['pct>100x'] < 100].sort_values(by='Sample')
 
     worksheet = ho_inp['worksheet']
     cov_gene_check = 'Gene 300X check'
     cov_gene_check_des = f'All samples in this worksheet have genes at >80% 300X.'
 
     #gene cov logic
-    if len(gene_fail_list) > 0:
+    if gene_fail_df.shape[0] > 0:
         cov_gene_check_res = 'FAIL'
     else:
         cov_gene_check_res = 'PASS'
@@ -956,23 +915,22 @@ def ho_coverage_check(ho_inp, ho_check_result_df):
     cov_exon_check = 'Exon 100X check'
     cov_exon_check_des = f'All samples in this worksheet have exon coverage at 100% 100X.'
 
-    if len(exon_fail_list) > 0:
+    if exon_fail_df.shape[0] > 0:
         cov_exon_check_res = 'FAIL'
     else:
         cov_exon_check_res = 'PASS'
 
-    ho_check_result_df = ho_check_result_df.append({'Check': cov_gene_check,
+    qcs_result_df = qcs_result_df.append({'Check': cov_gene_check,
                                             'Description': cov_gene_check_des,
                                             'Result': cov_gene_check_res,
                                             'Worksheet': worksheet}, ignore_index=True) 
 
-    ho_check_result_df = ho_check_result_df.append({'Check': cov_exon_check,
+    qcs_result_df = qcs_result_df.append({'Check': cov_exon_check,
                                             'Description': cov_exon_check_des,
                                             'Result': cov_exon_check_res,
                                             'Worksheet': worksheet}, ignore_index=True) 
 
-
-    return [ho_check_result_df, exon_dict, gene_dict]
+    return [qcs_result_df, exon_fail_df, gene_fail_df]
 
 def ho_neg_summary_table(ho_inp):
     '''
@@ -990,18 +948,19 @@ def ho_neg_summary_table(ho_inp):
     num_var = variants_all_df.shape[0]
     singleton_res = f'{singleton}/{num_var} singletons'
 
-    alt_var_df = variants_all_df[variants_all_df['Alleles'].str.contains(r'\d\d?,\d\d')]
-    alt_var = alt_var_df.shape[0]
+    alt_df = variants_all_df[variants_all_df['Alleles'].str.contains(r'\d\d?,\d\d')]
+    alt_var = alt_df.shape[0]
     alt_var_res = f'{alt_var} calls >= 10 alt reads'
 
-
+    # Show only SAMPLE -> AB columns for modal
+    alt_df = alt_df.loc[:,'SAMPLE':'AB']
 
     ho_neg_table_df = ho_neg_table_df.append({'Singletons': singleton_res,
                                             'ALT reads': alt_var_res,
                                             }, ignore_index=True) 
 
 
-    return [ho_neg_table_df, alt_var_df, alt_var]
+    return [ho_neg_table_df, alt_df, alt_var]
 
 def ho_merged_var_xls(ho_inp):
     '''
@@ -1043,135 +1002,34 @@ def ho_merged_var_xls(ho_inp):
     merged_sheet.conditional_formatting.add('B1:B10', formatting.rule.CellIsRule(operator='lessThan', formula=['0'], fill=red_fill))
     wb.save(xls_write)
 
-def ho_summary_xls(exon_dict, gene_dict, alt_df):
-    '''
-    Create workbook with 3 sheets >10 ALT, gene_cov, exon_cov
-    
-    TODO Need to simplify logic here. Originally the Dnum was only to appear once.
-    Now the Dnum is required for all exons to allow sorting in modal.
-    '''
 
-    # create the workbook with 2 tabs
-    wb = Workbook()
-    failed_exon_ws = wb.active
-    failed_exon_ws.title = 'Failed Exons'
-    failed_gene_ws = wb.create_sheet('Failed genes')
-    alt_ws = wb.create_sheet('ALT reads >10')
-    exon_header_list = ['Sample', 'Gene', 'Exon','PCT<100x']
-    gene_header_list = ['Sample', 'Gene','PCT<300X']
-    num_exon_add = len(exon_dict)
-    row_num = 1
-    skip_list = []
-
-    # Parsing exon_dict dnum: '<gene>,<exon>,<pct>'
-    for k,v in exon_dict.items():
-        # get the number of res rows
-        exon_info = exon_dict[k].split('\n')
-        res_row = len(exon_info)
-        # write D number
-        if row_num == 1:
-            failed_exon_ws.append(exon_header_list)
-            row_num += 1
-            failed_exon_ws.cell(row=row_num,column=1).value = k
-            insert_num = row_num + 1 
-            failed_exon_ws.insert_rows(insert_num, res_row)
-            for res in exon_info:
-                res = res.split(',')
-                gene = res[0]
-                exon_num = res[1]
-                pct_exon = res[2]
-                
-                # add the Dnum in 
-                failed_exon_ws.cell(row=row_num,column=1).value = k                
-                failed_exon_ws.cell(row=row_num,column=2).value = gene    
-                failed_exon_ws.cell(row=row_num,column=3).value = exon_num     
-                failed_exon_ws.cell(row=row_num,column=4).value = pct_exon
-                row_num += 1
-           
-        else:
-            failed_exon_ws.cell(row=row_num,column=1).value = k
-            for res in exon_info:
-                res = res.split(',')
-                gene = res[0]
-                exon_num = res[1]
-                pct_exon = res[2]
-                
-                #add in dnum
-                failed_exon_ws.cell(row=row_num,column=1).value = k                  
-                failed_exon_ws.cell(row=row_num,column=2).value = gene    
-                failed_exon_ws.cell(row=row_num,column=3).value = exon_num     
-                failed_exon_ws.cell(row=row_num,column=4).value = pct_exon
-                row_num += 1
-    
-    row_num = 1
-    # Parsing gene_dict dnum: '<gene>,<pct>'
-    for k,v in gene_dict.items():
-
-        # get the number of res rows
-        gene_info = gene_dict[k].split('\n')
-        res_row = len(gene_info)
-        # write D number
-        if row_num == 1:
-            failed_gene_ws.append(gene_header_list)
-            row_num += 1
-            failed_gene_ws.cell(row=row_num,column=1).value = k
-            insert_num = row_num + 1 
-            failed_gene_ws.insert_rows(insert_num, res_row)
-            for res in gene_info:
-                res = res.split(',')
-                gene = res[0]
-                pct_gene = res[1]
-                
-                failed_gene_ws.cell(row=row_num,column=2).value = gene    
-                failed_gene_ws.cell(row=row_num,column=3).value = pct_gene
-                row_num += 1
-           
-        else:
-            failed_gene_ws.cell(row=row_num,column=1).value = k
-            for res in gene_info:
-                res = res.split(',')
-                gene = res[0]
-                pct_gene = res[1]
-                
-                failed_gene_ws.cell(row=row_num,column=2).value = gene    
-                failed_gene_ws.cell(row=row_num,column=3).value = pct_gene
-                row_num += 1
-
- 
-    for r in dataframe_to_rows(alt_df, index=False,header=True):
-        alt_ws.append(r)
-
-    failed_exon_df = pd.DataFrame(failed_exon_ws.values)
-    failed_gene_df = pd.DataFrame(failed_gene_ws.values)
-    
-    wb.save(filename='sample_book.xlsx')
-
-    return [failed_exon_df, failed_gene_df, alt_df] 
-
-
-def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file_df, max_exon_df, exon_df, gene_df, alt_df, verify_fail_df, flt3_fail_df, run_details_check_df, ho_check_pac_df):
+def ho_generate_html_output(
+    run_details_df, qcs_result_df, pipeline_check_df,
+    pac_result_df, extra_info_dict):
     '''
     Creating a static HTML file to display the results to the Clinical Scientist reviewing the quality check report.
     This process involves changes directly to the html. TODO find replacement method to edit html.
     '''
-    #Add header to gene and exon df tables and remove none values from failed exon table
+    #addign additional variables
+    ho_neg_table_df = extra_info_dict[0]
+    file_size_df = extra_info_dict[1]
+    max_row_exon_df = extra_info_dict[2]
+    exon_df = extra_info_dict[3]
+    gene_df = extra_info_dict[4]
+    alt_df = extra_info_dict[5]
+    verify_fail_df = extra_info_dict[6]
+    flt3_fail_df = extra_info_dict[7] 
 
-    # converting xls to dfs means that they first row is the spreadsheet header .rename(..).drop(..) moves these to column headers is df
-    if gene_df.empty == False:
-        gene_df = gene_df.rename(columns=gene_df.iloc[0]).drop(gene_df.index[0]).sort_values(by=['Sample'])
-    else:
+    # Adding in PASS values for modal
+    if gene_df.empty == True:
         gene_df = pd.DataFrame(columns=['Message'])
         gene_mess = 'All samples in this worksheet have genes at >80% 300X.'
         gene_df = gene_df.append({'Message': gene_mess}, ignore_index=True)
-    if exon_df.empty == False:
-        exon_df = exon_df.rename(columns=exon_df.iloc[0]).drop(exon_df.index[0]).sort_values(by=['Sample'])
-    else:
+    if exon_df.empty == True:
         exon_df = pd.DataFrame(columns=['Message'])
         exon_mess = 'All samples in this worksheet have exon coverage at 100% 100X.'
         exon_df = exon_df.append({'Message': exon_mess}, ignore_index=True)
-    if alt_df.empty == False:
-        alt_df = alt_df.loc[:,'Index':'AB'].drop('Caller', axis=1)
-    else:
+    if alt_df.empty == True:
         alt_df = pd.DataFrame(columns=['Message'])
         alt_mess = 'The negative sample for this worksheet does not contain any variants with >= 10 alt reads.'
         alt_df = alt_df.append({'Message': alt_mess}, ignore_index=True)
@@ -1187,24 +1045,23 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
     css_classes = ['table', 'table-striped']
 
     run_details_html = run_details_df.to_html(classes= css_classes, table_id='run_details_table', index=False, justify='left', border=0)
-    run_details_check_html = run_details_check_df.to_html(classes= css_classes, table_id='run_details_check_table', index=False, justify='left', border=0)
-    check_results_html = check_results_df.to_html(classes= css_classes, table_id='check_table', index=False, justify='left', border=0)
-    check_results_pac_html = ho_check_pac_df.to_html(classes= css_classes, table_id='check_pac_table', index=False, justify='left', border=0)
+    pipeline_check_html = pipeline_check_df.to_html(classes= css_classes, table_id='run_details_check_table', index=False, justify='left', border=0)
+    qcs_results_html = qcs_result_df.to_html(classes= css_classes, table_id='check_table', index=False, justify='left', border=0)
+    pac_results_html = pac_result_df.to_html(classes= css_classes, table_id='check_pac_table', index=False, justify='left', border=0)
 
     # Add green and red colouring to PASS/FAIL
-    check_results_html = re.sub(r"<td>PASS</td>",r"<td style='color:green;'>PASS</td>", check_results_html)
-    check_results_html = re.sub(r"<td>FAIL</td>",r"<td style='color:red;'>FAIL</td>", check_results_html)
-    run_details_check_html = re.sub(r"<td>PASS</td>",r"<td style='color:green;'>PASS</td>", run_details_check_html)
-    run_details_check_html = re.sub(r"<td>FAIL</td>",r"<td style='color:red;'>FAIL</td>", run_details_check_html)
-    check_results_pac_html = re.sub(r"<td>PASS</td>",r"<td style='color:green;'>PASS</td>",check_results_pac_html)
-    check_results_pac_html = re.sub(r"<td>FAIL</td>",r"<td style='color:red;'>FAIL</td>", check_results_pac_html)
+    qcs_results_html = re.sub(r"<td>PASS</td>",r"<td style='color:green;'>PASS</td>", qcs_results_html)
+    qcs_results_html = re.sub(r"<td>FAIL</td>",r"<td style='color:red;'>FAIL</td>", qcs_results_html)
+    pipeline_check_html = re.sub(r"<td>PASS</td>",r"<td style='color:green;'>PASS</td>", pipeline_check_html)
+    pipeline_check_html = re.sub(r"<td>FAIL</td>",r"<td style='color:red;'>FAIL</td>", pipeline_check_html)
+    pac_results_html = re.sub(r"<td>PASS</td>",r"<td style='color:green;'>PASS</td>",pac_results_html)
+    pac_results_html = re.sub(r"<td>FAIL</td>",r"<td style='color:red;'>FAIL</td>", pac_results_html)
 
-
-    neg_details_html = neg_table_df.to_html(classes= css_classes ,table_id='neg_table', index=False, justify='left', border=0)
 
     #create addition HTML files from df. These are the non-modal tables
-    file_size_html = file_df.to_html(classes= css_classes, header=None, justify='left', table_id='file_size_table', border=0)
-    max_exon_html = max_exon_df.to_html(classes= css_classes, header=None, justify='left', table_id='max_exon_table', border=0)
+    neg_details_html = ho_neg_table_df.to_html(classes= css_classes ,table_id='neg_table', index=False, justify='left', border=0)
+    file_size_html = file_size_df.to_html(classes= css_classes, header=None, justify='left', table_id='file_size_table', border=0)
+    max_exon_html = max_row_exon_df.to_html(classes= css_classes, header=None, justify='left', table_id='max_exon_table', border=0)
 
     #Modal tables require extra logic to handle when no samples meet criteria (column == 1)
     if exon_df.shape[1] == 1: 
@@ -1235,9 +1092,9 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
 
     # Subbing in text to replace placeholders    
     base = re.sub(r'{run_details_html}', f'{run_details_html}', base)
-    base = re.sub(r'{run_details_check_html}', f'{run_details_check_html}', base)
-    base = re.sub(r'{check_results_html}', f'{check_results_html}', base) 
-    base = re.sub(r'{check_results_pac_html}', f'{check_results_pac_html}', base) 
+    base = re.sub(r'{pipeline_check_html}', f'{pipeline_check_html}', base)
+    base = re.sub(r'{qcs_results_html}', f'{qcs_results_html}', base) 
+    base = re.sub(r'{pac_results_html}', f'{pac_results_html}', base) 
     base = re.sub(r'_vcf_min_max_', f'{file_size_html}', base)
     base = re.sub(r'_neg_exon_depth_', f'{max_exon_html}', base)  
     base = re.sub(r'_neg_zero_', f'{neg_details_html}', base) 
@@ -1292,7 +1149,7 @@ def ho_generate_html_output(run_details_df, check_results_df, neg_table_df, file
     exon_rep_str = f'<td>All samples in this worksheet have exon coverage at 100% 100X.{failed_exon_modal}</td>'
     html_report = re.sub(exon_target_str, exon_rep_str, html_report)      
 
-    alt_call_num = int(re.search(r'(\d+) calls', neg_table_df['ALT reads'].values[0]).group(1))
+    alt_call_num = int(re.search(r'(\d+) calls', ho_neg_table_df['ALT reads'].values[0]).group(1))
     alt_target_str = f'<td>{alt_call_num} calls &gt;= 10 alt reads</td>'
     alt_rep_str = f'<td>{alt_call_num} calls &gt;= 10 alt reads {alt_var_modal}</td>'
     html_report = re.sub(alt_target_str, alt_rep_str, html_report)     
