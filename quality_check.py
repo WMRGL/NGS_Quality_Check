@@ -353,7 +353,7 @@ def run_details(cmd,xls_rep,run_details_df):
     # get experiment name from command output
     with open(cmd, 'r') as file:
         cmd_text = file.read()
-    search_term = r'-s\s\n\/network\/sequenced\/MiSeq_data\/\w{4,7}\/(shire_worksheet_numbered|Validation)\/(?:200000-299999\/)?(?:300000-399999\/)?' + re.escape(worksheet) + r'\/(\d{6}_M\d{5}_\d{4}_\d{9}-\w{5})\/SampleSheet.csv'
+    search_term = r'-s\s\n\/network\/sequenced\/MiSeq_data\/\w{4,7}\/(shire_worksheet_numbered|Validation)\/(?:200000-299999\/)?(?:300000-399999\/)?' + re.escape(worksheet) + r'(?:_\w+)?\/(\d{6}_M\d{5}_\d{4}_\d{9}-\w{5})\/SampleSheet.csv'
 
     experiment_name = re.search(search_term, cmd_text).group(2)
     
