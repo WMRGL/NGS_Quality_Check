@@ -852,23 +852,20 @@ def ho_flt3_check(ho_inp, qcs_result_df):
                 flt3_fail_df = flt3_fail_df.append(flt3, ignore_index=True, sort=True)
         except:
             flt3_check_res = 'N/A'
-
-    flt3_fail_df = flt3_fail_df[['Sample','AD','ALT-REF', 'Grouped AR (ALT-REF)','Grouped AB (ALT-REF)']]  
-    flt3_fail_df = flt3_fail_df.sort_values(by=['Sample'])
+    # Handle scenrio where FLT3 tab is empty for TSMP worksheets
+    if flt3_fail_df.empty == False:
+        flt3_fail_df = flt3_fail_df[['Sample','AD','ALT-REF', 'Grouped AR (ALT-REF)','Grouped AB (ALT-REF)']]  
+        flt3_fail_df = flt3_fail_df.sort_values(by=['Sample'])
     worksheet = ho_inp['worksheet']
     flt3_check = 'FLT3 ITD check'
     flt3_check_des = f'FLT3 variants are present on the FLT3 tab for samples on this worksheet.'
 
-    if not flt3_var_list:
-        flt3_check_res = flt3_check_res
+    if max(flt3_var_list) > 0:
+        flt3_check_res = 'PASS'
+    elif flt3_fail_df.empty == True or flt3_check_res == 'N/A':
+        flt3_check_res = 'FAIL'
     else:
-        if max(flt3_var_list) > 0:
-            flt3_check_res = 'PASS'
-        elif flt3_var_list == 0 and flt3_check_res == None:
-            flt3_check_res = 'FAIL'
-        else:
-            raise Exception("Error- Check FLT3 tabs!")
-
+        raise Exception("Error- Check FLT3 tabs!")
 
     qcs_result_df = qcs_result_df.append({'Check': flt3_check,
                                             'Description': flt3_check_des,
@@ -1020,7 +1017,7 @@ def ho_generate_html_output(
     verify_fail_df = extra_info_dict[6]
     flt3_fail_df = extra_info_dict[7] 
 
-    # Adding in PASS values for modal
+    #If modal dfs are empty place holder text will be added to the modal.
     if gene_df.empty == True:
         gene_df = pd.DataFrame(columns=['Message'])
         gene_mess = 'All samples in this worksheet have genes at >80% 300X.'
@@ -1044,21 +1041,12 @@ def ho_generate_html_output(
 
     css_classes = ['table', 'table-striped']
 
+    #Create HTML tables from dfs
     run_details_html = run_details_df.to_html(classes= css_classes, table_id='run_details_table', index=False, justify='left', border=0)
     pipeline_check_html = pipeline_check_df.to_html(classes= css_classes, table_id='run_details_check_table', index=False, justify='left', border=0)
     qcs_results_html = qcs_result_df.to_html(classes= css_classes, table_id='check_table', index=False, justify='left', border=0)
     pac_results_html = pac_result_df.to_html(classes= css_classes, table_id='check_pac_table', index=False, justify='left', border=0)
-
-    # Add green and red colouring to PASS/FAIL
-    qcs_results_html = re.sub(r"<td>PASS</td>",r"<td style='color:green;'>PASS</td>", qcs_results_html)
-    qcs_results_html = re.sub(r"<td>FAIL</td>",r"<td style='color:red;'>FAIL</td>", qcs_results_html)
-    pipeline_check_html = re.sub(r"<td>PASS</td>",r"<td style='color:green;'>PASS</td>", pipeline_check_html)
-    pipeline_check_html = re.sub(r"<td>FAIL</td>",r"<td style='color:red;'>FAIL</td>", pipeline_check_html)
-    pac_results_html = re.sub(r"<td>PASS</td>",r"<td style='color:green;'>PASS</td>",pac_results_html)
-    pac_results_html = re.sub(r"<td>FAIL</td>",r"<td style='color:red;'>FAIL</td>", pac_results_html)
-
-
-    #create addition HTML files from df. These are the non-modal tables
+    #create non-modal tables
     neg_details_html = ho_neg_table_df.to_html(classes= css_classes ,table_id='neg_table', index=False, justify='left', border=0)
     file_size_html = file_size_df.to_html(classes= css_classes, header=None, justify='left', table_id='file_size_table', border=0)
     max_exon_html = max_row_exon_df.to_html(classes= css_classes, header=None, justify='left', table_id='max_exon_table', border=0)
@@ -1089,83 +1077,43 @@ def ho_generate_html_output(
     #read in html base file
     with open('HO_base.html', 'r') as file:
         base = file.read()
+    # Add main tables
+    sub_table_replace = [
+        (r'{run_details_html}',f'{run_details_html}'),
+        (r'{pipeline_check_html}', f'{pipeline_check_html}'),
+        (r'{qcs_results_html}', f'{qcs_results_html}'),
+        (r'{pac_results_html}', f'{pac_results_html}'),
+        (r'_vcf_min_max_', f'{file_size_html}'), 
+        (r'_neg_exon_depth_', f'{max_exon_html}'), 
+        (r'_neg_zero_', f'{neg_details_html}')
+    ]    
+    for old, new in sub_table_replace:
+        base = re.sub(old, new, base)
 
-    # Subbing in text to replace placeholders    
-    base = re.sub(r'{run_details_html}', f'{run_details_html}', base)
-    base = re.sub(r'{pipeline_check_html}', f'{pipeline_check_html}', base)
-    base = re.sub(r'{qcs_results_html}', f'{qcs_results_html}', base) 
-    base = re.sub(r'{pac_results_html}', f'{pac_results_html}', base) 
-    base = re.sub(r'_vcf_min_max_', f'{file_size_html}', base)
-    base = re.sub(r'_neg_exon_depth_', f'{max_exon_html}', base)  
-    base = re.sub(r'_neg_zero_', f'{neg_details_html}', base) 
     html_report = base
-
 
     #get modal template
     with open('modal_base.html') as file:
         modal_base = file.read()
 
-    #Add table to modal
-    gene_modal_name = 'Low_coverage_genes'
-    gene_modal_title = 'Low coverage genes'
-    failed_gene_modal = re.sub(r'_modal_name_', f'{gene_modal_name}', modal_base)  
-    failed_gene_modal = re.sub(r'_modal_title_', f'{gene_modal_title}', failed_gene_modal)  
-    failed_gene_modal  = re.sub(r'_modal_table_', f'{gene_html}', failed_gene_modal)  
-
-    exon_modal_name = 'Failed_exons'
-    exon_modal_title = 'Failed exons'
-    failed_exon_modal = re.sub(r'_modal_name_', f'{exon_modal_name}', modal_base)  
-    failed_exon_modal = re.sub(r'_modal_title_', f'{exon_modal_title}', failed_exon_modal)  
-    failed_exon_modal  = re.sub(r'_modal_table_', f'{exon_html}', failed_exon_modal) 
-
-    alt_modal_name = 'alt_variants'
-    alt_modal_title = 'ALT variants'
-    alt_var_modal = re.sub(r'_modal_name_', f'{alt_modal_name}', modal_base)  
-    alt_var_modal = re.sub(r'_modal_title_', f'{alt_modal_title}', alt_var_modal)  
-    alt_var_modal  = re.sub(r'_modal_table_', f'{alt_html}', alt_var_modal)
-    alt_var_modal = re.sub(r'modal-dialog','modal-dialog modal-lg', alt_var_modal)
-
-    verify_modal_name = 'verify_fail'
-    verify_modal_title = 'VerifyBamId fails'
-    verify_fail_modal = re.sub(r'_modal_name_', f'{verify_modal_name}', modal_base)  
-    verify_fail_modal = re.sub(r'_modal_title_', f'{verify_modal_title}', verify_fail_modal)  
-    verify_fail_modal  = re.sub(r'_modal_table_', f'{verify_fail_html}', verify_fail_modal)
-    verify_fail_modal = re.sub(r'modal-dialog','modal-dialog modal-lg', verify_fail_modal)
-
-    flt3_modal_name = 'flt3_fail'
-    flt3_modal_title = 'FLT3 variants'
-    flt3_fail_modal = re.sub(r'_modal_name_', f'{flt3_modal_name}', modal_base)  
-    flt3_fail_modal = re.sub(r'_modal_title_', f'{flt3_modal_title}', flt3_fail_modal)  
-    flt3_fail_modal  = re.sub(r'_modal_table_', f'{flt3_fail_html}', flt3_fail_modal)
-    flt3_fail_modal = re.sub(r'modal-dialog','modal-dialog modal-lg', flt3_fail_modal)
-
-
-    #Position modals on HTML report
-    gene_target_str = r'<td>All samples in this worksheet have genes at &gt;80% 300X.</td>'
-    gene_rep_str = f'<td>All samples in this worksheet have genes at &gt;80% 300X.{failed_gene_modal}</td>'
-    html_report = re.sub(gene_target_str, gene_rep_str, html_report)
-
-    exon_target_str = r'<td>All samples in this worksheet have exon coverage at 100% 100X.</td>'
-    exon_rep_str = f'<td>All samples in this worksheet have exon coverage at 100% 100X.{failed_exon_modal}</td>'
-    html_report = re.sub(exon_target_str, exon_rep_str, html_report)      
-
+    modal_tables = [
+        gene_html,
+        exon_html,
+        alt_html,
+        verify_fail_html,
+        flt3_fail_html
+    ]
+    # set alt_call_num for html report
     alt_call_num = int(re.search(r'(\d+) calls', ho_neg_table_df['ALT reads'].values[0]).group(1))
-    alt_target_str = f'<td>{alt_call_num} calls &gt;= 10 alt reads</td>'
-    alt_rep_str = f'<td>{alt_call_num} calls &gt;= 10 alt reads {alt_var_modal}</td>'
-    html_report = re.sub(alt_target_str, alt_rep_str, html_report)     
-
-    verify_target_str = r'<td>Percentage contamination is below 10%.</td>'
-    verify_rep_str = f'<td>Percentage contamination is below 10%. {verify_fail_modal}</td>'
-    html_report = re.sub(verify_target_str, verify_rep_str, html_report)
-
-    flt3_target_str = r'<td>FLT3 variants are present on the FLT3 tab for samples on this worksheet.</td>'
-    flt3_rep_str = f'<td>FLT3 variants are present on the FLT3 tab for samples on this worksheet. {flt3_fail_modal}</td>'
-    html_report = re.sub(flt3_target_str, flt3_rep_str, html_report)
-
-    #small formatting changes to modal
-    modal_size_str = '<button type="button" class="btn pull-right" data-toggle="modal" data-target="#alt_variants">Details</button>'
-    modal_size_rep = '<button type="button" class="btn" data-toggle="modal" data-target="#alt_variants">Details</button>'
-    html_report = re.sub(modal_size_str, modal_size_rep, html_report)
+    # add modals to html report
+    html_report = ho_add_modals(html_report, modal_base, modal_tables, alt_call_num)
+    # add PASS/FAIL colour
+    colour_replace = [
+        ("<td>PASS</td>","<td style='color:green;'>PASS</td>"),
+        ("<td>FAIL</td>", "<td style='color:red;'>FAIL</td>")
+    ]
+    for old, new in colour_replace:
+        html_report = re.sub(old, new, html_report)
 
     worksheet_num = run_details_df['Worksheet'].squeeze()
     html_name = f'{worksheet_num}_quality_checks.html'
@@ -1188,6 +1136,75 @@ def add_nest_tables(check_details, file_html, exon_html):
     check_details = re.sub(f'{file_string}', f'{file_html}', check_details)
     check_details = re.sub(f'{exon_string}', f'{exon_html}', check_details)
     return check_details
+
+def ho_add_modals(html_report, modal_base, modal_tables, alt_call_num):
+    '''
+    A df to modals and modals to html_report
+    '''
+    gene_modal_name = 'Low_coverage_genes'
+    exon_modal_name = 'Failed_exons'
+    alt_modal_name = 'alt_variants'
+    verify_modal_name = 'verify_fail'
+    flt3_modal_name = 'flt3_fail'
+
+    gene_modal_title = 'Low coverage genes'
+    exon_modal_title = 'Failed exons'
+    alt_modal_title = 'ALT variants'
+    verify_modal_title = 'VerifyBamId fails'
+    flt3_modal_title = 'FLT3 variants'
+
+    modal_list = [
+        (gene_modal_name, gene_modal_title, modal_tables[0]),
+        (exon_modal_name, exon_modal_title, modal_tables[1]), 
+        (alt_modal_name, alt_modal_title, modal_tables[2]), 
+        (verify_modal_name, verify_modal_title, modal_tables[3]),
+        (flt3_modal_name, flt3_modal_title, modal_tables[4])
+    ]
+
+    add_modal_list = []
+    # creating each model for html report
+    for modal in modal_list:
+        sub_mod = modal_base
+        modal_replace = [
+            (r'_modal_name_', f'{modal[0]}'),
+            (r'_modal_title_', f'{modal[1]}'),
+            (r'_modal_table_', f'{modal[2]}')   
+        ]
+        for old, new in modal_replace:
+            sub_mod = re.sub(old, new, sub_mod)
+        # add large modal for alt, verify and flt3
+        if modal[0] == 'Low_coverage_genes' or modal[0] == 'Failed_exons':
+            pass
+        else:
+            sub_mod = re.sub(r'modal-dialog','modal-dialog modal-lg', sub_mod)
+        add_modal_list.append(sub_mod)
+    
+    failed_gene_modal = add_modal_list[0]
+    failed_exon_modal = add_modal_list[1]
+    alt_var_modal = add_modal_list[2]
+    verify_fail_modal = add_modal_list[3]
+    flt3_fail_modal = add_modal_list[4]
+
+    des_modal_pos =  [
+        (r'<td>All samples in this worksheet have genes at &gt;80% 300X.</td>',
+         f'<td>All samples in this worksheet have genes at &gt;80% 300X.{failed_gene_modal}</td>'),
+        (r'<td>All samples in this worksheet have exon coverage at 100% 100X.</td>',
+         f'<td>All samples in this worksheet have exon coverage at 100% 100X.{failed_exon_modal}</td>'),
+        (f'<td>{alt_call_num} calls &gt;= 10 alt reads</td>',
+         f'<td>{alt_call_num} calls &gt;= 10 alt reads {alt_var_modal}</td>'),
+        (r'<td>Percentage contamination is below 10%.</td>',
+         f'<td>Percentage contamination is below 10%. {verify_fail_modal}</td>'),
+        (r'<td>FLT3 variants are present on the FLT3 tab for samples on this worksheet.</td>',
+         f'<td>FLT3 variants are present on the FLT3 tab for samples on this worksheet. {flt3_fail_modal}</td>'),
+        ('<button type="button" class="btn pull-right" data-toggle="modal" data-target="#alt_variants">Details</button>',
+         '<button type="button" class="btn" data-toggle="modal" data-target="#alt_variants">Details</button>')
+    ]
+
+    for old, new in des_modal_pos:
+        html_report = re.sub(old, new, html_report)
+
+    return html_report
+
 
 # Generic regex used to extact ws_num etc
 # TODO replace TSHC section with variable name
