@@ -14,7 +14,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-ws_1', action='store', required=True, help='Path to worksheet 1 output files include TSHC_<ws>_version dir')
 parser.add_argument('-ws_2', action='store', help='Path to worksheet 2 output files include TSHC_<ws>_version dir')
 parser.add_argument('-out_dir', action='store', help='Specifing an output directory to store html reports')
-parser.add_argument('-samplesheet', action='store', help='SampleSheet requrired for HO panel quality checks')
+parser.add_argument('-s', action='store', help='SampleSheet requrired for HO panel quality checks')
 args = parser.parse_args()
 
 
@@ -33,8 +33,6 @@ def get_inputs(ws_1, ws_2):
         9) cmd_log_1 - command run text file (1st w/s in pair)
         10) cmd_log_2 - command run text file (2nd w/s pair)
         11) Panel - Name of panel
-
-    TODO- Moving panel assignment out of this function.
 
     '''
 
@@ -95,7 +93,6 @@ def get_inputs(ws_1, ws_2):
     
 
     return xls_rep_1, xls_rep_2, neg_rep, fastq_bam_1, fastq_bam_2, kin_xls, vcf_dir_1, vcf_dir_2, cmd_log_1, cmd_log_2, panel
-
 
 
 def results_excel_check(res, check_result_df):
@@ -285,7 +282,7 @@ def generate_html_output(check_result_df, run_details_df, panel, bed_1, bed_2):
     '''
     Creating a static HTML file to display the results to the Clinical Scientist reviewing the quality check report.
     This function calls the format_bed_files function to add in bed file information.
-    This process involves changes directly to the html. TODO find replacement method to edit html.
+    This process involves changes directly to the html.
     '''
 
     with open('css_style.css') as file:
@@ -453,19 +450,15 @@ def tshc_main(ws_1, ws_2):
 def assign_panel(ws_1, ws_2, sample_sheet):
     '''
     Assiging a panel and <panel>_main funtion to process pipeline output.
-    
-    TODO --> For now I have implemented this for TSMP... other panels to follow
-
     '''
     panel = re.search(panel_regex, ws_1).group(1)
 
-    if panel == 'TSMP':
-        ho_main(panel, ws_1, sample_sheet)
-    elif panel == 'TSHC':
+    if panel == 'TSHC':
         tshc_main(ws_1, ws_2)
+    elif panel == 'TSMP' or panel == 'CLL':
+        ho_main(panel, ws_1, sample_sheet)
     else:
-        print('Are you sure....Never heard of this panel')
-
+        raise Exception('Error: Panel specified not recognised.')
 
 def ho_main(panel, ws_1, sample_sheet):
     '''
@@ -513,18 +506,12 @@ def ho_main(panel, ws_1, sample_sheet):
 
 def sort_ho_inputs(panel, ws_1, sample_sheet):
     '''
-    a function to a dictionary of inputs
-
-    TODO- handle ~lock xls if samples open
-
     For the majority of checks use sample_1 one, for FLT3 check use whole list.
     '''
 
     worksheet = re.search(panel_regex, ws_1).group(2)
-
     if sample_sheet == None:
         raise Exception("A samplesheet has not been provided... check the command")
-
 
     pat_results_list = []
 
@@ -532,7 +519,6 @@ def sort_ho_inputs(panel, ws_1, sample_sheet):
     results_list = os.listdir(excel_base)
     excel_df = pd.DataFrame(results_list, columns=['sample_name'])    
 
-    # TODO check that SRY output is capitalised
     # sort all results
     neg_xls = excel_df[excel_df['sample_name'].str.contains('Neg|NEG')]
     pat_results = excel_df[~excel_df['sample_name'].str.contains('Neg|NEG|-fastq-bam-check|merged-variants|SRY')]
@@ -602,8 +588,6 @@ def ho_vcf_check(ho_inp, qcs_result_df):
     '''
     A check to determine if the number of VCFs generated
     is 2x the number of samples in the sample sheet
-
-    TODO check that the index value of 20 does not change between samplesheets!
     '''
 
     sample_sheet_path = ho_inp['sample_sheet']
@@ -643,14 +627,6 @@ def ho_vcf_check(ho_inp, qcs_result_df):
         vcf_check_res = 'FAIL'
     else:
         vcf_check_res = 'PASS'
-
-    #Addition of new columns to combine with Pipeline Checks 
-    # TODO remove duplcated code
-    panel = ho_inp['panel']
-    cmd = ho_inp['cmd_log_file']
-    worksheet = ho_inp['worksheet']
-    with open(cmd, 'r') as file:
-        cmd_text = file.read()
 
     qcs_result_df = qcs_result_df.append({'Check': vcf_check,
                                             'Description': vcf_check_des,
@@ -831,7 +807,6 @@ def ho_sry_check(ho_inp, qcs_result_df):
 def ho_flt3_check(ho_inp, qcs_result_df):
     '''
     If any variants are present on FLT3 tab then the check will pass
-    #TODO handle cases where no FLT3 tab is present
     '''
     flt3_var_list = []
     sample_list = ho_inp['pat_results']
@@ -846,9 +821,8 @@ def ho_flt3_check(ho_inp, qcs_result_df):
             flt3_var_list.append(flt3_df.shape[0])
             if not flt3_df.empty:
                 sample_name = re.search(r'D\d\d-\d{5}', sample)[0]
-
                 flt3 = flt3_df[['AD','ALT-REF', 'Grouped AR (ALT-REF)','Grouped AB (ALT-REF)']]   
-                flt3['Sample'] = sample_name
+                flt3 = flt3_df.assign(Sample=f'{sample_name}')
                 flt3_fail_df = flt3_fail_df.append(flt3, ignore_index=True, sort=True)
         except:
             flt3_check_res = 'N/A'
@@ -886,16 +860,18 @@ def ho_coverage_check(ho_inp, qcs_result_df):
     for sample in sample_list:
         gene_cov_df = pd.read_excel(sample, 'Coverage-gene')
         gene_cov_df = gene_cov_df[['Sample','Gene','pct>300x']]
-        gene_cov_data.append(gene_cov_df)
-
         exon_cov_df = pd.read_excel(sample, 'Coverage-exon')
         exon_cov_df = exon_cov_df[['Sample','Gene','Exon','pct>100x']]
-
         gene_cov_data.append(gene_cov_df)
         exon_cov_data.append(exon_cov_df)
 
     ws_gene_cov_df = pd.concat(gene_cov_data, ignore_index=True)
     ws_exon_cov_df = pd.concat(exon_cov_data, ignore_index=True)
+
+    #Show only Dnumbers in final table
+    ws_gene_cov_df['Sample'] = ws_gene_cov_df['Sample'].str.extract(r'(D\d\d-\d{5})', expand=True)
+    ws_exon_cov_df['Sample'] = ws_exon_cov_df['Sample'].str.extract(r'(D\d\d-\d{5})', expand=True)
+
     gene_fail_df = ws_gene_cov_df[ws_gene_cov_df['pct>300x'] < 80].sort_values(by='Sample')
     exon_fail_df = ws_exon_cov_df[ws_exon_cov_df['pct>100x'] < 100].sort_values(by='Sample')
 
@@ -959,53 +935,12 @@ def ho_neg_summary_table(ho_inp):
 
     return [ho_neg_table_df, alt_df, alt_var]
 
-def ho_merged_var_xls(ho_inp):
-    '''
-    Create merged variant xls
-    '''
-    xls = pd.ExcelFile(ho_inp['merged_variant_xls'])
-    merged_df = pd.read_excel(xls, 'Variants-all-data')
-
-    merged_vars_df = merged_df[~merged_df['SAMPLE'].str.contains('NEG|neg')]
-    merged_ab_df = merged_vars_df['AB']
-    mean_ab = merged_ab_df.mean()
-    stdev_ab = merged_ab_df.std()
-    plus_two_std = mean_ab + (2*stdev_ab)
-    minus_two_std = mean_ab - (2*stdev_ab)
-
-    panel = ho_inp['panel']
-    worksheet = ho_inp['worksheet']
-    excel_name = f'{panel}_{worksheet}'
-    #write to excel
-    xls_write = os.getcwd() + f'/{excel_name}.merged-variants.xlsx'
-    merged_vars_df.to_excel(xls_write, sheet_name='Variants-all-data', index=False)    
-
-    wb = load_workbook(filename=xls_write)
-    merged_sheet = wb.get_sheet_by_name('Variants-all-data')
-    merged_sheet.insert_rows(1,4)
-    merged_sheet.cell(row=1, column=15).value = mean_ab
-    merged_sheet.cell(row=2, column=15).value = stdev_ab
-    merged_sheet.cell(row=3, column=15).value = plus_two_std
-    merged_sheet.cell(row=4, column=15).value = minus_two_std
-
-    red_color = 'ffc7ce'
-    red_color_font = '9c0103'
-
-    red_font = styles.Font(size=14, bold=False, color=red_color_font)
-    red_fill = styles.PatternFill(start_color=red_color, end_color=red_color, fill_type='solid')
-
-    merged_sheet.conditional_formatting.add('l6:l1000', formatting.rule.CellIsRule(operator='between', formula=['1','100'], fill=red_fill, font=red_font))
-    merged_sheet.conditional_formatting.add('N6:N1000', formatting.rule.CellIsRule(operator='between', formula=['O4','O3'], fill=red_fill, font=red_font))
-    merged_sheet.conditional_formatting.add('B1:B10', formatting.rule.CellIsRule(operator='lessThan', formula=['0'], fill=red_fill))
-    wb.save(xls_write)
-
-
 def ho_generate_html_output(
     run_details_df, qcs_result_df, pipeline_check_df,
     pac_result_df, extra_info_dict):
     '''
     Creating a static HTML file to display the results to the Clinical Scientist reviewing the quality check report.
-    This process involves changes directly to the html. TODO find replacement method to edit html.
+    This process involves changes directly to the html.
     '''
     #addign additional variables
     ho_neg_table_df = extra_info_dict[0]
@@ -1017,62 +952,55 @@ def ho_generate_html_output(
     verify_fail_df = extra_info_dict[6]
     flt3_fail_df = extra_info_dict[7] 
 
-    #If modal dfs are empty place holder text will be added to the modal.
-    if gene_df.empty == True:
-        gene_df = pd.DataFrame(columns=['Message'])
-        gene_mess = 'All samples in this worksheet have genes at >80% 300X.'
-        gene_df = gene_df.append({'Message': gene_mess}, ignore_index=True)
-    if exon_df.empty == True:
-        exon_df = pd.DataFrame(columns=['Message'])
-        exon_mess = 'All samples in this worksheet have exon coverage at 100% 100X.'
-        exon_df = exon_df.append({'Message': exon_mess}, ignore_index=True)
-    if alt_df.empty == True:
-        alt_df = pd.DataFrame(columns=['Message'])
-        alt_mess = 'The negative sample for this worksheet does not contain any variants with >= 10 alt reads.'
-        alt_df = alt_df.append({'Message': alt_mess}, ignore_index=True)
-    if verify_fail_df.empty == True:
-        verify_fail_df = pd.DataFrame(columns=['Message'])
-        verify_fail_mess = 'All samples in this worksheet have a %CONT score < 10%.'
-        verify_fail_df = verify_fail_df.append({'Message': verify_fail_mess}, ignore_index=True)
-    if flt3_fail_df.empty == True:
-        flt3_fail_df = pd.DataFrame(columns=['Message'])
-        flt3_fail_mess = 'No FLT3 variants have been called.'
-        flt3_fail_df = flt3_fail_df.append({'Message': flt3_fail_mess}, ignore_index=True)
-
     css_classes = ['table', 'table-striped']
 
-    #Create HTML tables from dfs
+    #Create main HTML tables from dfs
     run_details_html = run_details_df.to_html(classes= css_classes, table_id='run_details_table', index=False, justify='left', border=0)
     pipeline_check_html = pipeline_check_df.to_html(classes= css_classes, table_id='run_details_check_table', index=False, justify='left', border=0)
     qcs_results_html = qcs_result_df.to_html(classes= css_classes, table_id='check_table', index=False, justify='left', border=0)
     pac_results_html = pac_result_df.to_html(classes= css_classes, table_id='check_pac_table', index=False, justify='left', border=0)
-    #create non-modal tables
-    neg_details_html = ho_neg_table_df.to_html(classes= css_classes ,table_id='neg_table', index=False, justify='left', border=0)
-    file_size_html = file_size_df.to_html(classes= css_classes, header=None, justify='left', table_id='file_size_table', border=0)
-    max_exon_html = max_row_exon_df.to_html(classes= css_classes, header=None, justify='left', table_id='max_exon_table', border=0)
 
-    #Modal tables require extra logic to handle when no samples meet criteria (column == 1)
-    if exon_df.shape[1] == 1: 
-        exon_html = exon_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='exon_fail_table', border=0)
-    else:
-        exon_html = exon_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='exon_fail_table', border=0)
-    if gene_df.shape[1] == 1:
+    #Create modal table and handle when dfs are empty- place holder text will be added to the modal.
+    if gene_df.empty == True:
+        gene_df = pd.DataFrame(columns=['Message'])
+        gene_mess = 'All samples in this worksheet have genes at >80% 300X.'
+        gene_df = gene_df.append({'Message': gene_mess}, ignore_index=True)
         gene_html = gene_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='gene_fail_table', border=0)
     else:
         gene_html = gene_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='gene_fail_table', border=0)
-    if alt_df.shape[1] == 1:       
+    if exon_df.empty == True:
+        exon_df = pd.DataFrame(columns=['Message'])
+        exon_mess = 'All samples in this worksheet have exon coverage at 100% 100X.'
+        exon_df = exon_df.append({'Message': exon_mess}, ignore_index=True)
+        exon_html = exon_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='exon_fail_table', border=0)
+    else:
+        exon_html = exon_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='exon_fail_table', border=0)
+    if alt_df.empty == True:
+        alt_df = pd.DataFrame(columns=['Message'])
+        alt_mess = 'The negative sample for this worksheet does not contain any variants with >= 10 alt reads.'
+        alt_df = alt_df.append({'Message': alt_mess}, ignore_index=True)
         alt_html = alt_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='alt_fail_table', border=0)
     else:
         alt_html = alt_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='alt_fail_table', border=0)
-    if verify_fail_df.shape[1] == 1:
+    if verify_fail_df.empty == True:
+        verify_fail_df = pd.DataFrame(columns=['Message'])
+        verify_fail_mess = 'All samples in this worksheet have a %CONT score < 10%.'
+        verify_fail_df = verify_fail_df.append({'Message': verify_fail_mess}, ignore_index=True)
         verify_fail_html = verify_fail_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='verify_fail_table', border=0)
     else:
         verify_fail_html = verify_fail_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='verify_fail_table', border=0)
-    if flt3_fail_df.shape[1] == 1:
+    if flt3_fail_df.empty == True:
+        flt3_fail_df = pd.DataFrame(columns=['Message'])
+        flt3_fail_mess = 'No FLT3 variants have been called.'
+        flt3_fail_df = flt3_fail_df.append({'Message': flt3_fail_mess}, ignore_index=True)
         flt3_fail_html = flt3_fail_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='flt3_fail_table', border=0)
     else:
         flt3_fail_html = flt3_fail_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='flt3_fail_table', border=0)
 
+    #create non-modal tables
+    neg_details_html = ho_neg_table_df.to_html(classes= css_classes ,table_id='neg_table', index=False, justify='left', border=0)
+    file_size_html = file_size_df.to_html(classes= css_classes, header=None, justify='left', table_id='file_size_table', border=0)
+    max_exon_html = max_row_exon_df.to_html(classes= css_classes, header=None, justify='left', table_id='max_exon_table', border=0)
 
     #read in html base file
     with open('HO_base.html', 'r') as file:
@@ -1126,7 +1054,6 @@ def ho_generate_html_output(
         os.chdir(args.out_dir)
         with open(html_name, 'w') as file:
             file.write(html_report)
-
 
 def add_nest_tables(check_details, file_html, exon_html):
     
@@ -1205,16 +1132,12 @@ def ho_add_modals(html_report, modal_base, modal_tables, alt_call_num):
 
     return html_report
 
-
 # Generic regex used to extact ws_num etc
-# TODO replace TSHC section with variable name
 panel_regex = r'\/(\w{4,7})_(\d{6})_(v[\.]?\d\.\d\.\d)\/'
+# define inputs
 ws_1 = args.ws_1
 ws_2 = args.ws_2
-sample_sheet = args.samplesheet
+sample_sheet = args.s
 
 # Assign panel and start workflow
 assign_panel(ws_1, ws_2, sample_sheet)
-
-
-#tshc_main(ws_1, ws_2)
