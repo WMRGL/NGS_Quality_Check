@@ -6,8 +6,6 @@ import re
 import numpy as np
 import glob
 import enum
-from openpyxl import load_workbook, Workbook, styles, formatting
-from openpyxl.utils.dataframe import dataframe_to_rows
 
 
 parser = argparse.ArgumentParser()
@@ -602,7 +600,7 @@ def ho_vcf_check(ho_inp, qcs_result_df):
 
     num_exp = num_sample * 2
 
-    vcf_search = vcf_dir_path + '*.vcf'
+    vcf_search = vcf_dir_path + '*.vcf*'
     vcf_files = glob.glob(vcf_search)
 
     file_size = []
