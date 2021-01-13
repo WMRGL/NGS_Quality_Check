@@ -472,17 +472,17 @@ def ho_main(panel, ws_1, sample_sheet):
     ho_check_df = pd.DataFrame(columns=['Worksheet','Check', 'Description','Result'])    
 
     # Pipeline checks run details
-    result_files = sort_ho_inputs(panel, ws_1, sample_sheet)
-    run_details_df = run_details_ho(result_files)
+    ho_inp = sort_ho_inputs(panel, ws_1, sample_sheet)
+    run_details_df = run_details_ho(ho_inp)
     # Pipeline check results
-    pipeline_check_df, file_size_df = ho_vcf_check(result_files, ho_check_df)
+    pipeline_check_df, file_size_df = ho_vcf_check(ho_inp, ho_check_df)
     # QC summary check results
-    qcs_result_df, max_row_exon_df, ho_neg_table_df, alt_df = ho_neg_checks(result_files, ho_check_df)
-    qcs_result_df, verify_fail_df = verifybamid_check(result_files, qcs_result_df)
-    qcs_result_df = ho_sry_check(result_files, qcs_result_df)
+    qcs_result_df, max_row_exon_df, ho_neg_table_df, alt_df = ho_neg_checks(ho_inp, ho_check_df)
+    qcs_result_df, verify_fail_df = verifybamid_check(ho_inp, qcs_result_df)
+    qcs_result_df = ho_sry_check(ho_inp, qcs_result_df)
     # Pre analysis checks results 
-    pac_result_df, flt3_fail_df = ho_flt3_check(result_files, ho_check_df)
-    pac_result_df, exon_fail_df, gene_fail_df = ho_coverage_check(result_files, pac_result_df)
+    pac_result_df, flt3_fail_df = ho_flt3_check(ho_inp, ho_check_df)
+    pac_result_df, exon_fail_df, gene_fail_df = ho_coverage_check(ho_inp, pac_result_df)
     file_size_df = file_size_df.transpose()
     max_row_exon_df = max_row_exon_df.transpose()
     
@@ -498,7 +498,8 @@ def ho_main(panel, ws_1, sample_sheet):
         qcs_result_df,
         pipeline_check_df,
         pac_result_df, 
-        extra_info_dict
+        extra_info_dict,
+        ho_inp
         )
 
 
@@ -563,9 +564,9 @@ def run_details_ho(ho_inp):
     with open(cmd, 'r') as file:
         cmd_text = file.read()
 
-    exp_term = r'-s\s\n\/network\/sequenced\/MiSeq_data\/Nextera_Rapid_Capture\/TruSight_Myeloid_Panel_v3\/(shire_worksheet_numbered|Validation)\/(?:200000-299999\/)?(?:300000-399999\/)?' + re.escape(worksheet) + r'\/(\d{6}_M\d{5}_\d{4}_\d{9}-\w{5})\/SampleSheet.csv'
+    exp_term = r'-s\s\n\/network\/sequenced\/MiSeq_data\/(Nextera_Rapid_Capture\/TruSight_Myeloid_Panel_v3|OGT_CLL)\/(shire_worksheet_numbered|Validation)\/(?:200000-299999\/)?(?:300000-399999\/)?' + re.escape(worksheet) + r'\/(\d{6}_M\d{5}_\d{4}_\d{9}-\w{5})\/SampleSheet.csv'
     pipe_term = r'Pipeline\scommand:\n\/opt\/scripts\/MiSeq-Universal-(v[\.]?\d\.\d\.\d)\/MiSeq-master-pipeline.py'
-    exp_name = re.search(exp_term, cmd_text).group(2)
+    exp_name = re.search(exp_term, cmd_text).group(3)
     pipe_version = re.search(pipe_term, cmd_text).group(1)
     check_title = 'Run details'
     run_details_des = 'Manual check of the worksheet number, panel, pipeline version and experiment name.'
@@ -591,11 +592,18 @@ def ho_vcf_check(ho_inp, qcs_result_df):
     sample_sheet_path = ho_inp['sample_sheet']
     vcf_dir_path = ho_inp['vcf_directory']
     sample_sheet_xls = pd.read_csv(sample_sheet_path)
-    # split sample sheet into section containing sample names
-    column_list = sample_sheet_xls.iloc[19:20].squeeze().to_list()
-    sample_df = pd.DataFrame(sample_sheet_xls.iloc[20:])
-    sample_df.columns = column_list
+    # split sample sheet into section containing sample names 
+    # The start position of the data section differs between TSMP and CLL
+    if ho_inp['panel'] == 'TSMP':
+      column_list = sample_sheet_xls.iloc[19:20].squeeze().to_list()
+      sample_df = pd.DataFrame(sample_sheet_xls.iloc[20:])
+    elif ho_inp['panel'] == 'CLL':
+      column_list = sample_sheet_xls.iloc[18:19].squeeze().to_list()
+      sample_df = pd.DataFrame(sample_sheet_xls.iloc[19:])
+    else:
+      raise "Check SampleSheet... The Sample_ID headers are not in the correct place."
 
+    sample_df.columns = column_list
     num_sample = sample_df['Sample_ID'].count()
 
     num_exp = num_sample * 2
@@ -806,7 +814,7 @@ def ho_flt3_check(ho_inp, qcs_result_df):
     '''
     If any variants are present on FLT3 tab then the check will pass
     '''
-    flt3_var_list = []
+    cll_ws_check = False
     sample_list = ho_inp['pat_results']
     flt3_check_res = None
     flt3_fail_df = pd.DataFrame(columns=['Sample','AD', 'ALT-REF'])
@@ -816,26 +824,26 @@ def ho_flt3_check(ho_inp, qcs_result_df):
         xls = pd.ExcelFile(sample)
         try:
             flt3_df = pd.read_excel(xls, 'FLT3')
-            flt3_var_list.append(flt3_df.shape[0])
             if not flt3_df.empty:
                 sample_name = re.search(r'D\d\d-\d{5}', sample)[0]
                 flt3 = flt3_df[['AD','ALT-REF', 'Grouped AR (ALT-REF)','Grouped AB (ALT-REF)']]   
                 flt3 = flt3_df.assign(Sample=f'{sample_name}')
                 flt3_fail_df = flt3_fail_df.append(flt3, ignore_index=True, sort=True)
         except:
-            flt3_check_res = 'N/A'
+            cll_ws_check = True
+            
     # Handle scenrio where FLT3 tab is empty for TSMP worksheets
     if flt3_fail_df.empty == False:
         flt3_fail_df = flt3_fail_df[['Sample','AD','ALT-REF', 'Grouped AR (ALT-REF)','Grouped AB (ALT-REF)']]  
         flt3_fail_df = flt3_fail_df.sort_values(by=['Sample'])
     worksheet = ho_inp['worksheet']
     flt3_check = 'FLT3 ITD check'
-    flt3_check_des = f'FLT3 variants are present on the FLT3 tab for samples on this worksheet.'
+    flt3_check_des = f'FLT3 ITD variants are present on the FLT3 tab for samples on this worksheet.'
 
-    if max(flt3_var_list) > 0:
-        flt3_check_res = 'PASS'
-    elif flt3_fail_df.empty == True or flt3_check_res == 'N/A':
+    if flt3_fail_df.empty == True:
         flt3_check_res = 'FAIL'
+    elif flt3_fail_df.shape[0] > 0:
+        flt3_check_res = 'PASS'
     else:
         raise Exception("Error- Check FLT3 tabs!")
 
@@ -857,19 +865,24 @@ def ho_coverage_check(ho_inp, qcs_result_df):
     exon_cov_data = []
     for sample in sample_list:
         gene_cov_df = pd.read_excel(sample, 'Coverage-gene')
+        # drop NaN values from bottom of sheet
+        gene_cov_df = gene_cov_df.dropna(subset=['Worksheet', 'Sample'])
         gene_cov_df = gene_cov_df[['Sample','Gene','pct>300x']]
+        
         exon_cov_df = pd.read_excel(sample, 'Coverage-exon')
+        # drop NaN values from bottom of sheet
+        exon_cov_df = exon_cov_df.dropna(subset=['Worksheet', 'Sample'])
         exon_cov_df = exon_cov_df[['Sample','Gene','Exon','pct>100x']]
         gene_cov_data.append(gene_cov_df)
         exon_cov_data.append(exon_cov_df)
 
     ws_gene_cov_df = pd.concat(gene_cov_data, ignore_index=True)
     ws_exon_cov_df = pd.concat(exon_cov_data, ignore_index=True)
-
+    
     #Show only Dnumbers in final table
     ws_gene_cov_df['Sample'] = ws_gene_cov_df['Sample'].str.extract(r'(D\d\d-\d{5})', expand=True)
     ws_exon_cov_df['Sample'] = ws_exon_cov_df['Sample'].str.extract(r'(D\d\d-\d{5})', expand=True)
-
+    
     gene_fail_df = ws_gene_cov_df[ws_gene_cov_df['pct>300x'] < 80].sort_values(by='Sample')
     exon_fail_df = ws_exon_cov_df[ws_exon_cov_df['pct>100x'] < 100].sort_values(by='Sample')
 
@@ -884,7 +897,7 @@ def ho_coverage_check(ho_inp, qcs_result_df):
         cov_gene_check_res = 'PASS'
 
     cov_exon_check = 'Exon 100X check'
-    cov_exon_check_des = f'All samples in this worksheet have exon coverage at 100% 100X.'
+    cov_exon_check_des = f'All samples in this worksheet have exon coverage at 100X.'
 
     if exon_fail_df.shape[0] > 0:
         cov_exon_check_res = 'FAIL'
@@ -935,7 +948,7 @@ def ho_neg_summary_table(ho_inp):
 
 def ho_generate_html_output(
     run_details_df, qcs_result_df, pipeline_check_df,
-    pac_result_df, extra_info_dict):
+    pac_result_df, extra_info_dict, ho_inp):
     '''
     Creating a static HTML file to display the results to the Clinical Scientist reviewing the quality check report.
     This process involves changes directly to the html.
@@ -989,7 +1002,7 @@ def ho_generate_html_output(
         verify_fail_html = verify_fail_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='verify_fail_table', border=0)
     if flt3_fail_df.empty == True:
         flt3_fail_df = pd.DataFrame(columns=['Message'])
-        flt3_fail_mess = 'No FLT3 variants have been called.'
+        flt3_fail_mess = 'No FLT3 ITD variants have been called.'
         flt3_fail_df = flt3_fail_df.append({'Message': flt3_fail_mess}, ignore_index=True)
         flt3_fail_html = flt3_fail_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='flt3_fail_table', border=0)
     else:
@@ -1003,6 +1016,10 @@ def ho_generate_html_output(
     #read in html base file
     with open('HO_base.html', 'r') as file:
         base = file.read()
+        
+    # Add panel name to title
+    panel_name_head = ho_inp['panel']
+    base = re.sub(r'_panel_name_', panel_name_head, base) 
     # Add main tables
     sub_table_replace = [
         (r'{run_details_html}',f'{run_details_html}'),
@@ -1131,7 +1148,7 @@ def ho_add_modals(html_report, modal_base, modal_tables, alt_call_num):
     return html_report
 
 # Generic regex used to extact ws_num etc
-panel_regex = r'\/(\w{4,7})_(\d{6})_(v[\.]?\d\.\d\.\d)\/'
+panel_regex = r'\/(TSHC|TSMP|CLL)_(\d{6})_(v[\.]?\d\.\d\.\d)\/'
 # define inputs
 ws_1 = args.ws_1
 ws_2 = args.ws_2
