@@ -981,7 +981,7 @@ def ho_generate_html_output(
         gene_html = gene_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='gene_fail_table', border=0)
     if exon_df.empty == True:
         exon_df = pd.DataFrame(columns=['Message'])
-        exon_mess = 'All samples in this worksheet have exon coverage at 100% 100X.'
+        exon_mess = 'All samples in this worksheet have exon coverage at 100X.'
         exon_df = exon_df.append({'Message': exon_mess}, ignore_index=True)
         exon_html = exon_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='exon_fail_table', border=0)
     else:
@@ -1130,14 +1130,14 @@ def ho_add_modals(html_report, modal_base, modal_tables, alt_call_num):
     des_modal_pos =  [
         (r'<td>All samples in this worksheet have genes at &gt;80% 300X.</td>',
          f'<td>All samples in this worksheet have genes at &gt;80% 300X.{failed_gene_modal}</td>'),
-        (r'<td>All samples in this worksheet have exon coverage at 100% 100X.</td>',
-         f'<td>All samples in this worksheet have exon coverage at 100% 100X.{failed_exon_modal}</td>'),
+        (r'<td>All samples in this worksheet have exon coverage at 100X.</td>',
+         f'<td>All samples in this worksheet have exon coverage at 100X.{failed_exon_modal}</td>'),
         (f'<td>{alt_call_num} calls &gt;= 10 alt reads</td>',
          f'<td>{alt_call_num} calls &gt;= 10 alt reads {alt_var_modal}</td>'),
         (r'<td>Percentage contamination is below 10%.</td>',
          f'<td>Percentage contamination is below 10%. {verify_fail_modal}</td>'),
-        (r'<td>FLT3 variants are present on the FLT3 tab for samples on this worksheet.</td>',
-         f'<td>FLT3 variants are present on the FLT3 tab for samples on this worksheet. {flt3_fail_modal}</td>'),
+        (r'<td>FLT3 ITD variants are present on the FLT3 tab for samples on this worksheet.</td>',
+         f'<td>FLT3 ITD variants are present on the FLT3 tab for samples on this worksheet. {flt3_fail_modal}</td>'),
         ('<button type="button" class="btn pull-right" data-toggle="modal" data-target="#alt_variants">Details</button>',
          '<button type="button" class="btn" data-toggle="modal" data-target="#alt_variants">Details</button>')
     ]
