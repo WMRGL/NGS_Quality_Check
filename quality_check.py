@@ -195,7 +195,7 @@ def kinship_check(kin_xls, check_result_df):
     A check to determine if any sample the kinship.xls file has a kinship values of >=0.48
     A description of the check and a PASS/FAIL result for the check is then added to the check_result_df
     '''
-    worksheet_name = re.search(r'\/(\d{6}_\d{6}).king.xlsx.*', kin_xls).group(1)
+    worksheet_name = re.search(r'\/(\d{6}_\d{6}).*.king.xlsx.*', kin_xls).group(1)
 
     kinship_check = 'Kinship check'
     kinship_check_des = 'A check to ensure that all samples in a worksheet pair have a kinship value of <0.48'
