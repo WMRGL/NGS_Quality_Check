@@ -4,7 +4,7 @@ import argparse
 import sys
 import re
 import numpy as np
-
+import glob
 
 
 parser = argparse.ArgumentParser()
@@ -85,7 +85,7 @@ def get_inputs(ws_1, ws_2):
     # defining cmd_log and kin
     cmd_log_1 = ws_1 + '{}.commandline_usage_logfile'.format(ws_1_name)
     cmd_log_2 = ws_2 + '{}.commandline_usage_logfile'.format(ws_2_name)
-    kin_xls = ws_1 + '{}_{}.king.xlsx'.format(ws_1_name, ws_2_name)
+    kin_xls = glob.glob(ws_1 + '*king.xlsx')[0]
     
 
     return xls_rep_1, xls_rep_2, neg_rep, fastq_bam_1, fastq_bam_2, kin_xls, vcf_dir_1, vcf_dir_2, cmd_log_1, cmd_log_2, panel
