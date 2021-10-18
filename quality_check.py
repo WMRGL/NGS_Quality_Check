@@ -870,7 +870,7 @@ def ho_coverage_check(ho_inp, qcs_result_df):
         exon_cov_df = pd.read_excel(sample, 'Coverage-exon')
         # drop NaN values from bottom of sheet
         exon_cov_df = exon_cov_df.dropna(subset=['Worksheet', 'Sample'])
-        exon_cov_df = exon_cov_df[['Sample','Gene','Exon','pct>100x']]
+        exon_cov_df = exon_cov_df[['Sample','Gene','Exon','Min','pct>100x']]
         gene_cov_data.append(gene_cov_df)
         exon_cov_data.append(exon_cov_df)
 
