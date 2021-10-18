@@ -643,19 +643,17 @@ def ho_vcf_check(ho_inp, qcs_result_df):
     return qcs_result_df, file_size_df
 
 
-def convert_unit(size_in_bytes, unit='KB'):
+def convert_unit(size_in_bytes):
     '''
-    A function to convert size of VCFs from bytes to human readable format
+    A function to convert size of VCFs from bytes to KB. Clinical Scientists
+    will check min and max file size in Windows explorer. The file size will be rounded to
+    to the nearest KB. 
     '''
-
-    if unit == 'KB':
-       return str(int(size_in_bytes/1024)) + ' KB'
-    elif unit == 'MB':
-       return str(int(size_in_bytes/(1024*1024))) + ' MB' 
-    elif unit == 'GB':
-       return str(int(size_in_bytes/(1024*1024*1024))) + ' GB'
+    if size_in_bytes != 0:
+        return str(round(size_in_bytes/1024)) + ' KB'
     else:
-        return str(size_in_bytes) + ' B'
+        return '0 KB'
+
 
 def ho_neg_checks(ho_inp, qcs_result_df):
     '''
