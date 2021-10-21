@@ -298,8 +298,8 @@ def generate_html_output(check_result_df, run_details_df, panel, bed_1, bed_2):
     html = re.sub(r"<td>PASS</td>",r"<td class='PASS'>PASS</td>", html)
     html = re.sub(r"<td>FAIL</td>",r"<td class='FAIL'>FAIL</td>", html)
 
-    file_name = "_".join(run_details_df['Worksheet'].values.tolist()) + '_quality_checks.html'
-
+    file_name = "_".join(run_details_df['Worksheet'].values.tolist()) + '_TSHC_quality_checks.html'
+    print(file_name)
     return file_name, html
 
 
@@ -471,6 +471,11 @@ def ho_main(panel, ws_1, sample_sheet):
     '''
     ho_check_df = pd.DataFrame(columns=['Worksheet','Check', 'Description','Result'])    
 
+    #set gene coverage thresholds for TSMP (200x) and CLL (300x)
+    if panel == 'TSMP':
+        gene_cov_thres = 200
+    if panel == 'CLL':
+        gene_cov_thres = 300
     # Pipeline checks run details
     ho_inp = sort_ho_inputs(panel, ws_1, sample_sheet)
     run_details_df = run_details_ho(ho_inp)
@@ -482,15 +487,15 @@ def ho_main(panel, ws_1, sample_sheet):
     qcs_result_df = ho_sry_check(ho_inp, qcs_result_df)
     # Pre analysis checks results 
     pac_result_df, flt3_fail_df = ho_flt3_check(ho_inp, ho_check_df)
-    pac_result_df, exon_fail_df, gene_fail_df = ho_coverage_check(ho_inp, pac_result_df)
+    pac_result_df, exon_fail_df, gene_fail_df = ho_coverage_check(ho_inp, pac_result_df, gene_cov_thres)
     file_size_df = file_size_df.transpose()
     max_row_exon_df = max_row_exon_df.transpose()
     
-    # Additional info used in modals and sub tables
-    extra_info_dict = [
+    # list of dicts and additional info used in modals and sub tables
+    extra_info_list = [
         ho_neg_table_df, file_size_df, max_row_exon_df,
         exon_fail_df, gene_fail_df, alt_df, 
-        verify_fail_df, flt3_fail_df
+        verify_fail_df, flt3_fail_df, gene_cov_thres
         ]
 
     ho_generate_html_output(
@@ -498,7 +503,7 @@ def ho_main(panel, ws_1, sample_sheet):
         qcs_result_df,
         pipeline_check_df,
         pac_result_df, 
-        extra_info_dict,
+        extra_info_list,
         ho_inp
         )
 
@@ -852,7 +857,7 @@ def ho_flt3_check(ho_inp, qcs_result_df):
 
     return qcs_result_df, flt3_fail_df
 
-def ho_coverage_check(ho_inp, qcs_result_df): 
+def ho_coverage_check(ho_inp, qcs_result_df, gene_cov_thres): 
     '''
     1. Merge all gene coverage and exon coverage in one
     2. Check if >80% for Coverage-gene in Coverage-gene tab (assign PASS/FAIL)
@@ -862,11 +867,13 @@ def ho_coverage_check(ho_inp, qcs_result_df):
     sample_list = ho_inp['pat_results']
     gene_cov_data = []
     exon_cov_data = []
+    pct_header = f'pct>{gene_cov_thres}x'
+
     for sample in sample_list:
         gene_cov_df = pd.read_excel(sample, 'Coverage-gene')
         # drop NaN values from bottom of sheet
         gene_cov_df = gene_cov_df.dropna(subset=['Worksheet', 'Sample'])
-        gene_cov_df = gene_cov_df[['Sample','Gene','pct>300x']]
+        gene_cov_df = gene_cov_df[['Sample','Gene',f'{pct_header}']]
         
         exon_cov_df = pd.read_excel(sample, 'Coverage-details')
         # drop NaN values from bottom of sheet
@@ -881,12 +888,12 @@ def ho_coverage_check(ho_inp, qcs_result_df):
     #Show only Dnumbers in final table
     ws_gene_cov_df['Sample'] = ws_gene_cov_df['Sample'].str.extract(r'(D\d\d-\d{5})', expand=True)
     ws_exon_cov_df['Sample'] = ws_exon_cov_df['Sample'].str.extract(r'(D\d\d-\d{5})', expand=True)
-  
-    gene_fail_df = ws_gene_cov_df[ws_gene_cov_df['pct>300x'] < 80].sort_values(by='Sample')
+    
+    gene_fail_df = ws_gene_cov_df[ws_gene_cov_df[f'{pct_header}'] < 80].sort_values(by='Sample')
     exon_fail_df = ws_exon_cov_df[ws_exon_cov_df['Min_depth'] < 100].sort_values(by='Sample')
     worksheet = ho_inp['worksheet']
-    cov_gene_check = 'Gene 300X check'
-    cov_gene_check_des = f'All samples in this worksheet have genes at >80% 300X.'
+    cov_gene_check = f'Gene {str(gene_cov_thres)}x check'
+    cov_gene_check_des = f'All samples in this worksheet have genes at >80% {str(gene_cov_thres)}x.'
 
     #gene cov logic
     if gene_fail_df.shape[0] > 0:
@@ -894,8 +901,8 @@ def ho_coverage_check(ho_inp, qcs_result_df):
     else:
         cov_gene_check_res = 'PASS'
 
-    cov_exon_check = 'Exon 100X check'
-    cov_exon_check_des = f'All samples in this worksheet have exon coverage at 100X.'
+    cov_exon_check = 'Exon 100x check'
+    cov_exon_check_des = f'All samples in this worksheet have exon coverage at 100x.'
 
     if exon_fail_df.shape[0] > 0:
         cov_exon_check_res = 'FAIL'
@@ -946,20 +953,22 @@ def ho_neg_summary_table(ho_inp):
 
 def ho_generate_html_output(
     run_details_df, qcs_result_df, pipeline_check_df,
-    pac_result_df, extra_info_dict, ho_inp):
+    pac_result_df, extra_info_list, ho_inp):
     '''
     Creating a static HTML file to display the results to the Clinical Scientist reviewing the quality check report.
     This process involves changes directly to the html.
     '''
     #addign additional variables
-    ho_neg_table_df = extra_info_dict[0]
-    file_size_df = extra_info_dict[1]
-    max_row_exon_df = extra_info_dict[2]
-    exon_df = extra_info_dict[3]
-    gene_df = extra_info_dict[4]
-    alt_df = extra_info_dict[5]
-    verify_fail_df = extra_info_dict[6]
-    flt3_fail_df = extra_info_dict[7] 
+    ho_neg_table_df = extra_info_list[0]
+    file_size_df = extra_info_list[1]
+    max_row_exon_df = extra_info_list[2]
+    exon_df = extra_info_list[3]
+    gene_df = extra_info_list[4]
+    alt_df = extra_info_list[5]
+    verify_fail_df = extra_info_list[6]
+    flt3_fail_df = extra_info_list[7] 
+    gene_cov_thres = extra_info_list[8]
+    
 
     css_classes = ['table', 'table-striped']
 
@@ -972,11 +981,12 @@ def ho_generate_html_output(
     #Create modal table and handle when dfs are empty- place holder text will be added to the modal.
     if gene_df.empty == True:
         gene_df = pd.DataFrame(columns=['Message'])
-        gene_mess = 'All samples in this worksheet have genes at >80% 300X.'
+        gene_mess = f'All samples in this worksheet have genes at >80% {gene_cov_thres}x.'
         gene_df = gene_df.append({'Message': gene_mess}, ignore_index=True)
         gene_html = gene_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='gene_fail_table', border=0)
     else:
         gene_html = gene_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='gene_fail_table', border=0)
+        
     if exon_df.empty == True:
         exon_df = pd.DataFrame(columns=['Message'])
         exon_mess = 'All samples in this worksheet have exon coverage at 100X.'
@@ -1016,8 +1026,8 @@ def ho_generate_html_output(
         base = file.read()
         
     # Add panel name to title
-    panel_name_head = ho_inp['panel']
-    base = re.sub(r'_panel_name_', panel_name_head, base) 
+    panel = ho_inp['panel']
+    base = re.sub(r'_panel_name_', panel, base) 
     # Add main tables
     sub_table_replace = [
         (r'{run_details_html}',f'{run_details_html}'),
@@ -1047,7 +1057,7 @@ def ho_generate_html_output(
     # set alt_call_num for html report
     alt_call_num = int(re.search(r'(\d+) calls', ho_neg_table_df['ALT reads'].values[0]).group(1))
     # add modals to html report
-    html_report = ho_add_modals(html_report, modal_base, modal_tables, alt_call_num)
+    html_report = ho_add_modals(html_report, modal_base, modal_tables, alt_call_num, gene_cov_thres)
     # add PASS/FAIL colour
     colour_replace = [
         ("<td>PASS</td>","<td style='color:green;'>PASS</td>"),
@@ -1057,7 +1067,7 @@ def ho_generate_html_output(
         html_report = re.sub(old, new, html_report)
 
     worksheet_num = run_details_df['Worksheet'].squeeze()
-    html_name = f'{worksheet_num}_quality_checks.html'
+    html_name = f'{worksheet_num}_{panel}_quality_checks.html'
 
     if args.out_dir == None:
         with open(html_name, 'w') as file:
@@ -1077,7 +1087,7 @@ def add_nest_tables(check_details, file_html, exon_html):
     check_details = re.sub(f'{exon_string}', f'{exon_html}', check_details)
     return check_details
 
-def ho_add_modals(html_report, modal_base, modal_tables, alt_call_num):
+def ho_add_modals(html_report, modal_base, modal_tables, alt_call_num, gene_cov_thres):
     '''
     A df to modals and modals to html_report
     '''
@@ -1126,10 +1136,10 @@ def ho_add_modals(html_report, modal_base, modal_tables, alt_call_num):
     flt3_fail_modal = add_modal_list[4]
 
     des_modal_pos =  [
-        (r'<td>All samples in this worksheet have genes at &gt;80% 300X.</td>',
-         f'<td>All samples in this worksheet have genes at &gt;80% 300X.{failed_gene_modal}</td>'),
-        (r'<td>All samples in this worksheet have exon coverage at 100X.</td>',
-         f'<td>All samples in this worksheet have exon coverage at 100X.{failed_exon_modal}</td>'),
+        (rf'<td>All samples in this worksheet have genes at &gt;80% {gene_cov_thres}x.</td>',
+         f'<td>All samples in this worksheet have genes at &gt;80% {gene_cov_thres}x.{failed_gene_modal}</td>'),
+        (r'<td>All samples in this worksheet have exon coverage at 100x.</td>',
+         f'<td>All samples in this worksheet have exon coverage at 100x.{failed_exon_modal}</td>'),
         (f'<td>{alt_call_num} calls &gt;= 10 alt reads</td>',
          f'<td>{alt_call_num} calls &gt;= 10 alt reads {alt_var_modal}</td>'),
         (r'<td>Percentage contamination is below 10%.</td>',
