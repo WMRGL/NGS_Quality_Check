@@ -854,9 +854,10 @@ def ho_flt3_check(ho_inp, qcs_result_df):
 
 def ho_coverage_check(ho_inp, qcs_result_df): 
     '''
-    1. merge all gene coverage and exon coverage in one
-    2. check if >80%  and 100% for coverage-gene and coverage-exon PASS/FAIL
-    3. Return gene and exon fails as df
+    1. Merge all gene coverage and exon coverage in one
+    2. Check if >80% for Coverage-gene in Coverage-gene tab (assign PASS/FAIL)
+    3. Check if min_depth value in Coverage-details tab is <100 (assign PASS/FAIL)
+    4. Return gene and exon fails as df
     '''
     sample_list = ho_inp['pat_results']
     gene_cov_data = []
@@ -867,10 +868,10 @@ def ho_coverage_check(ho_inp, qcs_result_df):
         gene_cov_df = gene_cov_df.dropna(subset=['Worksheet', 'Sample'])
         gene_cov_df = gene_cov_df[['Sample','Gene','pct>300x']]
         
-        exon_cov_df = pd.read_excel(sample, 'Coverage-exon')
+        exon_cov_df = pd.read_excel(sample, 'Coverage-details')
         # drop NaN values from bottom of sheet
-        exon_cov_df = exon_cov_df.dropna(subset=['Worksheet', 'Sample'])
-        exon_cov_df = exon_cov_df[['Sample','Gene','Exon','Min','pct>100x']]
+        exon_cov_df = exon_cov_df.dropna(subset=['Sample'])
+        exon_cov_df = exon_cov_df[['Sample','GENE','Exon','Min_depth']]
         gene_cov_data.append(gene_cov_df)
         exon_cov_data.append(exon_cov_df)
 
@@ -880,10 +881,9 @@ def ho_coverage_check(ho_inp, qcs_result_df):
     #Show only Dnumbers in final table
     ws_gene_cov_df['Sample'] = ws_gene_cov_df['Sample'].str.extract(r'(D\d\d-\d{5})', expand=True)
     ws_exon_cov_df['Sample'] = ws_exon_cov_df['Sample'].str.extract(r'(D\d\d-\d{5})', expand=True)
-    
+  
     gene_fail_df = ws_gene_cov_df[ws_gene_cov_df['pct>300x'] < 80].sort_values(by='Sample')
-    exon_fail_df = ws_exon_cov_df[ws_exon_cov_df['pct>100x'] < 100].sort_values(by='Sample')
-
+    exon_fail_df = ws_exon_cov_df[ws_exon_cov_df['Min_depth'] < 100].sort_values(by='Sample')
     worksheet = ho_inp['worksheet']
     cov_gene_check = 'Gene 300X check'
     cov_gene_check_des = f'All samples in this worksheet have genes at >80% 300X.'
