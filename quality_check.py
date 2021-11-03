@@ -618,8 +618,9 @@ def ho_vcf_check(ho_inp, qcs_result_df):
 
     file_size = []
     for file in vcf_files:
-        size = os.stat(file).st_size
-        file_size.append(size)
+        if file.endswith('.gz'):
+          size = os.stat(file).st_size
+          file_size.append(size)
 
     min_file = convert_unit(min(file_size))
     max_file = convert_unit(max(file_size))
