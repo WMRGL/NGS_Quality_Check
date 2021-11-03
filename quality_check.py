@@ -569,7 +569,7 @@ def run_details_ho(ho_inp):
     with open(cmd, 'r') as file:
         cmd_text = file.read()
 
-    exp_term = r'-s\s\n\/network\/sequenced\/MiSeq_data\/(Nextera_Rapid_Capture\/TruSight_Myeloid_Panel_v3|OGT_CLL)\/(shire_worksheet_numbered|Validation)\/(?:200000-299999\/)?(?:300000-399999\/)?' + re.escape(worksheet) + r'\/(\d{6}_M\d{5}_\d{4}_\d{9}-\w{5})\/SampleSheet.csv'
+    exp_term = r'-s\s\n\/network\/sequenced\/MiSeq_data\/(Nextera_Rapid_Capture\/TruSight_Myeloid_Panel_v3|OGT_CLL|TSMP_Flex)\/(shire_worksheet_numbered|Validation)\/(?:200000-299999\/)?(?:300000-399999\/)?' + re.escape(worksheet) + r'\/(\d{6}_M\d{5}_\d{4}_\d{9}-\w{5})\/SampleSheet.csv'
     pipe_term = r'Pipeline\scommand:\n\/opt\/scripts\/MiSeq-Universal-(v[\.]?\d\.\d\.\d)\/MiSeq-master-pipeline.py'
     exp_name = re.search(exp_term, cmd_text).group(3)
     pipe_version = re.search(pipe_term, cmd_text).group(1)
