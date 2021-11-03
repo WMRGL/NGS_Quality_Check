@@ -877,8 +877,8 @@ def ho_coverage_check(ho_inp, qcs_result_df, gene_cov_thres):
         
         exon_cov_df = pd.read_excel(sample, 'Coverage-details')
         # drop NaN values from bottom of sheet
-        exon_cov_df = exon_cov_df.dropna(subset=['Sample'])
-        exon_cov_df = exon_cov_df[['Sample','GENE','Exon','Min_depth']]
+        exon_cov_df = exon_cov_df.dropna(subset=['SAMPLE'])
+        exon_cov_df = exon_cov_df[['SAMPLE','GENE','Exon','Min_depth']]
         gene_cov_data.append(gene_cov_df)
         exon_cov_data.append(exon_cov_df)
 
@@ -887,10 +887,10 @@ def ho_coverage_check(ho_inp, qcs_result_df, gene_cov_thres):
     
     #Show only Dnumbers in final table
     ws_gene_cov_df['Sample'] = ws_gene_cov_df['Sample'].str.extract(r'(D\d\d-\d{5})', expand=True)
-    ws_exon_cov_df['Sample'] = ws_exon_cov_df['Sample'].str.extract(r'(D\d\d-\d{5})', expand=True)
+    ws_exon_cov_df['SAMPLE'] = ws_exon_cov_df['SAMPLE'].str.extract(r'(D\d\d-\d{5})', expand=True)
     
     gene_fail_df = ws_gene_cov_df[ws_gene_cov_df[f'{pct_header}'] < 80].sort_values(by='Sample')
-    exon_fail_df = ws_exon_cov_df[ws_exon_cov_df['Min_depth'] < 100].sort_values(by='Sample')
+    exon_fail_df = ws_exon_cov_df[ws_exon_cov_df['Min_depth'] < 100].sort_values(by='SAMPLE')
     worksheet = ho_inp['worksheet']
     cov_gene_check = f'Gene {str(gene_cov_thres)}x check'
     cov_gene_check_des = f'All samples in this worksheet have genes at >80% {str(gene_cov_thres)}x.'
