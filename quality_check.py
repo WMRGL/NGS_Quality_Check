@@ -433,6 +433,7 @@ def tshc_main(ws_1, ws_2):
     ws_2_out = args.ws_2
 
     if args.out_dir == None:
+        print(f'Saving {name} report to {ws_1_out} and {ws_2_out}')
         os.chdir(ws_1_out)
         with open(name, 'w') as file:
             file.write(html_report)
@@ -440,7 +441,7 @@ def tshc_main(ws_1, ws_2):
         with open(name, 'w') as file:
             file.write(html_report)
     else:
-        print(f'Saving html reports to {args.out_dir}')
+        print(f'Saving {name} report to {args.out_dir}')
         os.chdir(args.out_dir)
         with open(name, 'w') as file:
             file.write(html_report)
@@ -1070,11 +1071,15 @@ def ho_generate_html_output(
     worksheet_num = run_details_df['Worksheet'].squeeze()
     html_name = f'{worksheet_num}_{panel}_quality_checks.html'
 
+    ws_1_out = args.ws_1
+
     if args.out_dir == None:
+        os.chdir(ws_1_out)
+        print(f'Saving {html_name} report to {ws_1_out}')
         with open(html_name, 'w') as file:
             file.write(html_report)
     else:
-        print(f'Saving html reports to {args.out_dir}')
+        print(f'Saving {html_name} report to {args.out_dir}')
         os.chdir(args.out_dir)
         with open(html_name, 'w') as file:
             file.write(html_report)
