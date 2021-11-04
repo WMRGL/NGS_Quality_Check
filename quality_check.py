@@ -676,7 +676,7 @@ def ho_neg_checks(ho_inp, qcs_result_df):
     if panel == 'TSMP':
         exon_target = 491
     elif panel == 'CLL':
-        exon_target = 148
+        exon_target = 150
     else:
         raise Exception('This panel has not been added to this script.')
 
@@ -690,9 +690,9 @@ def ho_neg_checks(ho_inp, qcs_result_df):
     neg_exon_check_des = f'There are {exon_target} exons present in the negative sample.'
 
     # Number of exons present depends on panel
-    if panel == 'TSMP' and num_exons == 491:
+    if panel == 'TSMP' and num_exons == exon_target:
         neg_exon_res = 'PASS'
-    elif panel == 'CLL' and num_exons == 148:
+    elif panel == 'CLL' and num_exons == exon_target:
         neg_exon_res = 'PASS'
     else:
         neg_exon_res = 'FAIL'
