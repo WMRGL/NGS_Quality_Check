@@ -299,7 +299,6 @@ def generate_html_output(check_result_df, run_details_df, panel, bed_1, bed_2):
     html = re.sub(r"<td>FAIL</td>",r"<td class='FAIL'>FAIL</td>", html)
 
     file_name = "_".join(run_details_df['Worksheet'].values.tolist()) + '_TSHC_quality_checks.html'
-    print(file_name)
     return file_name, html
 
 
@@ -680,9 +679,9 @@ def ho_neg_checks(ho_inp, qcs_result_df):
     else:
         raise Exception('This panel has not been added to this script.')
 
-    neg_xls_path = ho_inp['negative']
     xls = pd.ExcelFile(ho_inp['negative'])
     neg_exon_df = pd.read_excel(xls, 'Coverage-exon')
+    neg_call_df = pd.read_excel(xls, 'Variants-all-data')
     num_exons = neg_exon_df['Max'].count()
 
     worksheet = ho_inp['worksheet']
@@ -722,13 +721,13 @@ def ho_neg_checks(ho_inp, qcs_result_df):
     else:
         neg_depth_res = 'PASS'
 
-    neg_zero_check = 'Negative read check > 0'
-    neg_zero_check_des = f'The maximum number of reads in each exon of the negative sample is greater than 0. _neg_zero_'    
+    neg_calls_check = 'Negative calls check'
+    neg_calls_check_des = f'There are no calls in the negative control. _neg_calls_'    
 
-    if max_num_exons > 0:
-        neg_zero_res = 'PASS'
-    else:
+    if neg_call_df.shape[0] > 0:
         neg_zero_res = 'FAIL'
+    else:
+        neg_zero_res = 'PASS'
 
     ## singleton and num ATL reads (inc details button)
     ho_neg_table_df, alt_df, alt_var = ho_neg_summary_table(ho_inp)
@@ -746,8 +745,8 @@ def ho_neg_checks(ho_inp, qcs_result_df):
                                             'Result': neg_depth_res,
                                             'Worksheet': worksheet}, ignore_index=True)
 
-    qcs_result_df = qcs_result_df.append({'Check': neg_zero_check,
-                                            'Description': neg_zero_check_des,
+    qcs_result_df = qcs_result_df.append({'Check': neg_calls_check,
+                                            'Description': neg_calls_check_des,
                                             'Result': neg_zero_res,
                                             'Worksheet': worksheet}, ignore_index=True)
 
@@ -1038,7 +1037,7 @@ def ho_generate_html_output(
         (r'{pac_results_html}', f'{pac_results_html}'),
         (r'_vcf_min_max_', f'{file_size_html}'), 
         (r'_neg_exon_depth_', f'{max_exon_html}'), 
-        (r'_neg_zero_', f'{neg_details_html}')
+        (r'_neg_calls_', f'{neg_details_html}')
     ]    
     for old, new in sub_table_replace:
         base = re.sub(old, new, base)
