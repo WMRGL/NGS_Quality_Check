@@ -6,6 +6,7 @@ import re
 import numpy as np
 import glob
 import enum
+import glob
 
 
 parser = argparse.ArgumentParser()
@@ -87,7 +88,7 @@ def get_inputs(ws_1, ws_2):
     # defining cmd_log and kin
     cmd_log_1 = ws_1 + '{}.commandline_usage_logfile'.format(ws_1_name)
     cmd_log_2 = ws_2 + '{}.commandline_usage_logfile'.format(ws_2_name)
-    kin_xls = ws_1 + '{}_{}.king.xlsx'.format(ws_1_name, ws_2_name)
+    kin_xls = glob.glob(ws_1 + '*king.xlsx')[0]
     
 
     return xls_rep_1, xls_rep_2, neg_rep, fastq_bam_1, fastq_bam_2, kin_xls, vcf_dir_1, vcf_dir_2, cmd_log_1, cmd_log_2, panel
@@ -196,7 +197,7 @@ def kinship_check(kin_xls, check_result_df):
     A check to determine if any sample the kinship.xls file has a kinship values of >=0.48
     A description of the check and a PASS/FAIL result for the check is then added to the check_result_df
     '''
-    worksheet_name = re.search(r'\/(\d{6}_\d{6}).king.xlsx.*', kin_xls).group(1)
+    worksheet_name = re.search(r'\/(\d{6}_\d{6}).*.king.xlsx.*', kin_xls).group(1)
 
     kinship_check = 'Kinship check'
     kinship_check_des = 'A check to ensure that all samples in a worksheet pair have a kinship value of <0.48'
@@ -353,18 +354,18 @@ def run_details(cmd,xls_rep,run_details_df):
     # get experiment name from command output
     with open(cmd, 'r') as file:
         cmd_text = file.read()
-    search_term = r'-s\s\n\/network\/sequenced\/MiSeq_data\/\w{4,7}\/(shire_worksheet_numbered|Validation)\/(?:200000-299999\/)?(?:300000-399999\/)?' + re.escape(worksheet) + r'\/(\d{6}_M\d{5}_\d{4}_\d{9}-\w{5})\/SampleSheet.csv'
+    search_term = r'-s\s\n\/network\/sequenced\/MiSeq_data\/(TSHC)\/.*(?:' + re.escape(worksheet) + r')?\/(\d{6}_M\d{5}_\d{4}_\d{9}-\w{5})\/.*'
 
-    experiment_name = re.search(search_term, cmd_text).group(2)
-    
-    if experiment_name == None:
-        raise Exception('The experiment name is not present! check regex pattern.')
+    try:
+      experiment_name = re.search(search_term, cmd_text).group(2)
+    except:
+      raise Exception("Command line log file check fail- Check path in command line log file vs regex")
 
     # get pipeline version, bed file names and AB threshold
     xls = pd.ExcelFile(xls_rep)
     config_df = pd.read_excel(xls, 'config_parameters')
     allele_balance = config_df[config_df['key']=='AB_threshold']['variable'].values[0]
-    pipe_version = config_df[config_df['key']=='pipeline version']['variable'].values[0]
+    pipe_version = config_df[config_df['key']=='pipeline_version']['variable'].values[0]
     target_bed = config_df[config_df['key']=='target_regions']['variable'].values[0].split('/')[-1]
     refined_target_bed = config_df[config_df['key']=='refined_target_regions']['variable'].values[0].split('/')[-1]
     coverage_bed = config_df[config_df['key']=='coverage_regions']['variable'].values[0].split('/')[-1]
