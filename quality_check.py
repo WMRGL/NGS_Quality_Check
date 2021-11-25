@@ -142,7 +142,7 @@ def results_excel_check(res, check_result_df):
 def neg_excel_check(neg_xls, check_result_df):
     '''
     2 independent checks on the negative sample excel report produced by the pipeline run (1 per pair):
-        a) Numer of exons- In the 'Coverage-exon' tab 1204 exons should be present
+        a) Numer of exons- In the 'Coverage-exon' tab 1350 exons should be present
         b) Max number of reads in negative- In column M of the 'Coverage-exon' no max should be > 0
 
     A description of the checks and a PASS/FAIL result for a given check are then added to the check_result_df
@@ -156,9 +156,9 @@ def neg_excel_check(neg_xls, check_result_df):
 
     # number of exons check
     num_exons_check = 'Number of exons in negative sample'
-    num_exons_check_des = 'A check to determine if 1207 exons are present in the negative control (Coverage-exon tab)'
+    num_exons_check_des = 'A check to determine if 1350 exons are present in the negative control (Coverage-exon tab)'
     
-    if len(neg_exon_df) == 1207:
+    if len(neg_exon_df) == 1350:
         num_exons_check_result = 'PASS'
     else:
         num_exons_check_result = 'FAIL'
