@@ -1,75 +1,82 @@
 import os
 import pandas as pd
 import argparse
-import sys
 import re
 import numpy as np
 import glob
-import enum
-import glob
-
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-ws_1', action='store', required=True, help='Path to worksheet 1 output files include TSHC_<ws>_version dir')
-parser.add_argument('-ws_2', action='store', help='Path to worksheet 2 output files include TSHC_<ws>_version dir')
-parser.add_argument('-out_dir', action='store', help='Specifing an output directory to store html reports')
-parser.add_argument('-s', action='store', help='SampleSheet requrired for HO panel quality checks')
+parser.add_argument('-ws_1', action='store', required=True,
+                    help='Path to worksheet 1 output files (TSHC/TSMP/CLL) include TSHC_<ws>_version dir')
+parser.add_argument('-ws_2', action='store',
+                    help='Path to worksheet 2 output files (TSHC) include TSHC_<ws>_version dir')
+parser.add_argument('-out_dir', action='store',
+                    help='Specifing an output directory to store html reports')
+parser.add_argument('-s', action='store',
+                    help='SampleSheet requrired for HO panel quality checks')
 args = parser.parse_args()
 
 
-
-def get_inputs(ws_1, ws_2):
+def tshc_get_inputs(ws_1, ws_2):
     '''
-    All TSHC runs are conducted in pairs. The get_inputs function defines the
+    All TSHC runs are conducted in pairs. The tshc_get_inputs function defines the
     following variables for a paired set of outputs:
-        2) xls_rep_2- excel report (1st w/s in pair) 
-        3) neg_rep- excel report for negative samples (1 per pair)
-        4) fastq_bam_1 - fastq-bam comparison excel report (1st w/s in pair) 
-        5) fastq_bam_2 - fastq-bam comparison excel report (2nd w/s in pair) 
-        6) kin_xls - kinship report for pair
-        7) vcf_dir_1 - path to vcf output directory (1st w/s in pair)
-        8) vcf_dir_2  - path to vcf output directory (2nd w/s in pair)
-        9) cmd_log_1 - command run text file (1st w/s in pair)
-        10) cmd_log_2 - command run text file (2nd w/s pair)
-        11) Panel - Name of panel
+        1) xls_rep_1, xls_rep2- excel report (1st and 2nd w/s in pair) 
+        2) neg_rep- excel report for negative samples (1 per pair)
+        3) fastq_bam_1 - fastq-bam comparison excel report (1st w/s in pair) 
+        4) fastq_bam_2 - fastq-bam comparison excel report (2nd w/s in pair) 
+        5) kin_xls - kinship report for pair
+        6) vcf_dir_1 - path to vcf output directory (1st w/s in pair)
+        7) vcf_dir_2  - path to vcf output directory (2nd w/s in pair)
+        8) cmd_log_1 - command run text file (1st w/s in pair)
+        9) cmd_log_2 - command run text file (2nd w/s pair)
+        10) Panel - Name of panel
 
     '''
 
-    ws_1_run_info = re.search(r'\/(\w{4,7})_(\d{6})_(v[\.]?\d\.\d\.\d)\/', ws_1)    
-    ws_2_run_info = re.search(r'\/(\w{4,7})_(\d{6})_(v[\.]?\d\.\d\.\d)\/', ws_2)  
+    ws_1_run_info = re.search(
+        r'\/(\w{4,7})_(\d{6})_(v[\.]?\d\.\d\.\d)\/', ws_1)
+    ws_2_run_info = re.search(
+        r'\/(\w{4,7})_(\d{6})_(v[\.]?\d\.\d\.\d)\/', ws_2)
 
     if ws_1_run_info == None or ws_2_run_info == None:
         raise Exception('Run information not available! Check regex pattern.')
 
     ws_1_panel = ws_1_run_info.group(1)
     ws_1_name = ws_1_run_info.group(2)
-    ws_1_version = ws_1_run_info.group(3)
     ws_2_panel = ws_2_run_info.group(1)
     ws_2_name = ws_2_run_info.group(2)
-    ws_2_version = ws_2_run_info.group(3)
-    
+
     if ws_1_panel == ws_2_panel:
         panel = ws_1_panel
     else:
         raise Exception('Panels from ws_1 and ws_2 do not match!')
 
     # defining excel inputs
-    ws_1_excel_reports = ws_1 + 'excel_reports_{}_{}/'.format(ws_1_panel, ws_1_name)
-    ws_1_list = pd.DataFrame(os.listdir(ws_1_excel_reports), columns=['sample_name'])
-    ws_2_excel_reports = ws_2 + 'excel_reports_{}_{}/'.format(ws_2_panel, ws_2_name)
-    ws_2_list = pd.DataFrame(os.listdir(ws_2_excel_reports), columns=['sample_name'])
+    ws_1_excel_reports = ws_1 + \
+        'excel_reports_{}_{}/'.format(ws_1_panel, ws_1_name)
+    ws_1_list = pd.DataFrame(os.listdir(
+        ws_1_excel_reports), columns=['sample_name'])
+    ws_2_excel_reports = ws_2 + \
+        'excel_reports_{}_{}/'.format(ws_2_panel, ws_2_name)
+    ws_2_list = pd.DataFrame(os.listdir(
+        ws_2_excel_reports), columns=['sample_name'])
 
-    xls_rep_1 = ws_1_list[~ws_1_list['sample_name'].str.contains('Neg|-fastq-bam-check|merged-variants')]
-    xls_rep_2 = ws_2_list[~ws_2_list['sample_name'].str.contains('Neg|-fastq-bam-check|merged-variants')]
+    xls_rep_1 = ws_1_list[~ws_1_list['sample_name'].str.contains(
+        'Neg|-fastq-bam-check|merged-variants')]
+    xls_rep_2 = ws_2_list[~ws_2_list['sample_name'].str.contains(
+        'Neg|-fastq-bam-check|merged-variants')]
     neg_rep_1 = ws_1_list[ws_1_list['sample_name'].str.contains('Neg')]
     neg_rep_2 = ws_2_list[ws_2_list['sample_name'].str.contains('Neg')]
-    fastq_xls_1 = ws_1_list[ws_1_list['sample_name'].str.contains('fastq-bam-check')]
-    fastq_xls_2 = ws_2_list[ws_2_list['sample_name'].str.contains('fastq-bam-check')]
+    fastq_xls_1 = ws_1_list[ws_1_list['sample_name'].str.contains(
+        'fastq-bam-check')]
+    fastq_xls_2 = ws_2_list[ws_2_list['sample_name'].str.contains(
+        'fastq-bam-check')]
 
     xls_rep_1 = ws_1_excel_reports + xls_rep_1.values[0][0]
     xls_rep_2 = ws_2_excel_reports + xls_rep_2.values[0][0]
 
-    #determine which ws contains the negative sample
+    # determine which ws contains the negative sample
     if len(neg_rep_1) != 0:
         neg_rep = ws_1_excel_reports + neg_rep_1.values[0][0]
     elif len(neg_rep_2) != 0:
@@ -77,11 +84,11 @@ def get_inputs(ws_1, ws_2):
     else:
         raise Exception('Error the negative sample is not present!')
 
-    # get fastq-bam-check file names 
+    # get fastq-bam-check file names
     fastq_bam_1 = ws_1_excel_reports + fastq_xls_1.values[0][0]
     fastq_bam_2 = ws_2_excel_reports + fastq_xls_2.values[0][0]
 
-    # defining vcf directory path 
+    # defining vcf directory path
     vcf_dir_1 = ws_1 + 'vcfs_{}_{}/'.format(ws_1_panel, ws_1_name)
     vcf_dir_2 = ws_2 + 'vcfs_{}_{}/'.format(ws_2_panel, ws_2_name)
 
@@ -89,12 +96,11 @@ def get_inputs(ws_1, ws_2):
     cmd_log_1 = ws_1 + '{}.commandline_usage_logfile'.format(ws_1_name)
     cmd_log_2 = ws_2 + '{}.commandline_usage_logfile'.format(ws_2_name)
     kin_xls = glob.glob(ws_1 + '*king.xlsx')[0]
-    
 
     return xls_rep_1, xls_rep_2, neg_rep, fastq_bam_1, fastq_bam_2, kin_xls, vcf_dir_1, vcf_dir_2, cmd_log_1, cmd_log_2, panel
 
 
-def results_excel_check(res, check_result_df):
+def tshc_results_excel_check(res, check_result_df):
     '''
     2 independent checks are completed on each excel report generated by the pipeline:
         a) 20x coverage check- Column V of the 'Hyb-QC' tab. PASS if all samples >96% (excludes D00-00000)
@@ -105,12 +111,13 @@ def results_excel_check(res, check_result_df):
     xls = pd.ExcelFile(res)
     hybqc_df = pd.read_excel(xls, 'Hyb-QC')
     verify_bam_id_df = pd.read_excel(xls, 'VerifyBamId')
-    
+
     work_num = os.path.basename(res)
     worksheet_name = re.search(r'\d{6}', work_num)[0]
-    
-    # list of all % coverage at 20x (excluding control) 
-    coverage_list = hybqc_df[~hybqc_df['Sample'].str.contains('D00-00000')]['PCT_TARGET_BASES_20X'].values
+
+    # list of all % coverage at 20x (excluding control)
+    coverage_list = hybqc_df[~hybqc_df['Sample'].str.contains(
+        'D00-00000')]['PCT_TARGET_BASES_20X'].values
     coverage_check = '20x coverage check'
     coverage_check_des = 'A check to determine if 96% of all target bases in each sample are covered at >=20X'
     coverage_result = 'PASS'
@@ -118,8 +125,8 @@ def results_excel_check(res, check_result_df):
     for value in coverage_list:
         if value < 0.96:
             coverage_result = 'FAIL'
-            
-    #list all VerifyBamId results (inc control)
+
+    # list all VerifyBamId results (inc control)
     verify_bam_list = verify_bam_id_df['%CONT'].values
     verify_bam_check = 'VerifyBamId check'
     verify_bam_check_des = 'A check to determine if all samples in a worksheet have contamination <3%'
@@ -127,19 +134,19 @@ def results_excel_check(res, check_result_df):
     for value in verify_bam_list:
         if value >= 3:
             verify_bam_result = 'FAIL'
-    
+
     check_result_df = check_result_df.append({'Check': verify_bam_check,
-                            'Description': verify_bam_check_des,
-                            'Result': verify_bam_result, 'Worksheet': worksheet_name}, ignore_index=True)
-    
+                                              'Description': verify_bam_check_des,
+                                              'Result': verify_bam_result, 'Worksheet': worksheet_name}, ignore_index=True)
+
     check_result_df = check_result_df.append({'Check': coverage_check,
-                            'Description': coverage_check_des,
-                            'Result': coverage_result, 'Worksheet':worksheet_name}, ignore_index=True)
-    
+                                              'Description': coverage_check_des,
+                                              'Result': coverage_result, 'Worksheet': worksheet_name}, ignore_index=True)
+
     return check_result_df
-    
-    
-def neg_excel_check(neg_xls, check_result_df):
+
+
+def tshc_neg_excel_check(neg_xls, check_result_df):
     '''
     2 independent checks on the negative sample excel report produced by the pipeline run (1 per pair):
         a) Numer of exons- In the 'Coverage-exon' tab 1350 exons should be present
@@ -147,22 +154,22 @@ def neg_excel_check(neg_xls, check_result_df):
 
     A description of the checks and a PASS/FAIL result for a given check are then added to the check_result_df
     '''
-    
+
     work_num = os.path.basename(neg_xls)
     worksheet_name = re.search(r'\d{6}', work_num)[0]
-    
+
     xls = pd.ExcelFile(neg_xls)
     neg_exon_df = pd.read_excel(xls, 'Coverage-exon')
 
     # number of exons check
     num_exons_check = 'Number of exons in negative sample'
     num_exons_check_des = 'A check to determine if 1350 exons are present in the negative control (Coverage-exon tab)'
-    
+
     if len(neg_exon_df) == 1350:
         num_exons_check_result = 'PASS'
     else:
         num_exons_check_result = 'FAIL'
-    
+
     cov_neg_exons_check = 'Contamination of negative sample'
     cov_neg_exons_check_des = 'A check to determine if the max read depth of the negative sample is equal to 0'
     max_neg_coverage = neg_exon_df['Max'].values
@@ -177,107 +184,106 @@ def neg_excel_check(neg_xls, check_result_df):
     else:
         cov_neg_exons_check_result = 'PASS'
 
-
     check_result_df = check_result_df.append({'Check': num_exons_check,
-                                                'Description': num_exons_check_des,
-                                                'Result': num_exons_check_result,
-                                                'Worksheet': worksheet_name}, ignore_index=True)
+                                              'Description': num_exons_check_des,
+                                              'Result': num_exons_check_result,
+                                              'Worksheet': worksheet_name}, ignore_index=True)
 
     check_result_df = check_result_df.append({'Check': cov_neg_exons_check,
-                                                'Description': cov_neg_exons_check_des,
-                                                'Result': cov_neg_exons_check_result,
-                                                'Worksheet': worksheet_name}, ignore_index=True)
-    
+                                              'Description': cov_neg_exons_check_des,
+                                              'Result': cov_neg_exons_check_result,
+                                              'Worksheet': worksheet_name}, ignore_index=True)
+
     return check_result_df
 
 
-
-def kinship_check(kin_xls, check_result_df):
+def tshc_kinship_check(kin_xls, check_result_df):
     '''
     A check to determine if any sample the kinship.xls file has a kinship values of >=0.48
     A description of the check and a PASS/FAIL result for the check is then added to the check_result_df
     '''
-    worksheet_name = re.search(r'\/(\d{6}_\d{6}).*.king.xlsx.*', kin_xls).group(1)
+    worksheet_name = re.search(
+        r'\/(\d{6}_\d{6}).*.king.xlsx.*', kin_xls).group(1)
 
-    kinship_check = 'Kinship check'
-    kinship_check_des = 'A check to ensure that all samples in a worksheet pair have a kinship value of <0.48'
-    
+    tshc_kinship_check = 'Kinship check'
+    tshc_kinship_check_des = 'A check to ensure that all samples in a worksheet pair have a kinship value of <0.48'
+
     xls = pd.ExcelFile(kin_xls)
     kinship_df = pd.read_excel(xls, 'Kinship')
-    
+
     kinship_values = kinship_df['Kinship'].values
-    
+
     if max(kinship_values) >= 0.48:
-        kinship_check_result = 'FAIL'
+        tshc_kinship_check_result = 'FAIL'
     else:
-        kinship_check_result = 'PASS'
-    
-    # Additional step to set fail for any kinship result containing inf and nan values 
+        tshc_kinship_check_result = 'PASS'
+
+    # Additional step to set fail for any kinship result containing inf and nan values
     for kin in kinship_values:
         if np.isnan(kin) == True or np.isinf(kin) == True:
-            kinship_check_result = 'FAIL'
-    
-    check_result_df = check_result_df.append({'Check': kinship_check,
-                                                'Description': kinship_check_des,
-                                                'Result': kinship_check_result,
-                                                'Worksheet': worksheet_name}, ignore_index=True)
-    
+            tshc_kinship_check_result = 'FAIL'
+
+    check_result_df = check_result_df.append({'Check': tshc_kinship_check,
+                                              'Description': tshc_kinship_check_des,
+                                              'Result': tshc_kinship_check_result,
+                                              'Worksheet': worksheet_name}, ignore_index=True)
+
     return check_result_df
 
 
-
-def vcf_dir_check(vcf_dir, check_result_df):
+def tshc_vcf_dir_check(vcf_dir, check_result_df):
     '''
     A check to see if 48 VCF files have been generated
     A description of the check and a PASS/FAIL result for the check is then added to the check_result_df
     '''
 
-    worksheet_name = str(re.search(r'\/vcfs_\w{4}_(\d{6})\/', vcf_dir).group(1))
-    vcf_dir_check = 'VCF file count check'
+    worksheet_name = str(
+        re.search(r'\/vcfs_\w{4}_(\d{6})\/', vcf_dir).group(1))
+    tshc_vcf_dir_check = 'VCF file count check'
     vcf_dir_check_des = 'A check to determine if 48 VCFs have been generated'
-    
+
     if len(os.listdir(vcf_dir)) == 48:
         vcf_dir_check_result = 'PASS'
     else:
         vcf_dir_check_result = 'FAIL'
-    
-    check_result_df = check_result_df.append({'Check': vcf_dir_check,
-                                                'Description': vcf_dir_check_des,
-                                                'Result': vcf_dir_check_result,
-                                                'Worksheet': worksheet_name}, ignore_index=True)
-    
+
+    check_result_df = check_result_df.append({'Check': tshc_vcf_dir_check,
+                                              'Description': vcf_dir_check_des,
+                                              'Result': vcf_dir_check_result,
+                                              'Worksheet': worksheet_name}, ignore_index=True)
+
     return check_result_df
 
 
-def fastq_bam_check(fastq_xls, check_result_df):
+def tshc_fastq_bam_check(fastq_xls, check_result_df):
     '''
     A check to determine that the expected number of reads are present in each FASTQ and BAM file
     A description of the check and a PASS/FAIL result for the check is then added to the check_result_df
     '''
-    
+
     work_num = os.path.basename(fastq_xls)
     worksheet_name = re.search(r'\d{6}', work_num)[0]
-    
 
-    fastq_bam_check = 'FASTQ-BAM check'
-    fastq_bam_check_des = 'A check to determine that the expected number of reads are present in each FASTQ and BAM file'
+    tshc_fastq_bam_check = 'FASTQ-BAM check'
+    tshc_fastq_bam_check_des = 'A check to determine that the expected number of reads are present in each FASTQ and BAM file'
     xls = pd.ExcelFile(fastq_xls)
     fastq_bam_df = pd.read_excel(xls, 'Check')
     fastq_bam = set(fastq_bam_df['Result'].values)
 
     if 'FAIL' in fastq_bam:
-        fastq_bam_check_result = 'FAIL'
+        tshc_fastq_bam_check_result = 'FAIL'
     else:
-        fastq_bam_check_result = 'PASS'
-    
-    check_result_df = check_result_df.append({'Check': fastq_bam_check,
-                                                'Description': fastq_bam_check_des,
-                                                'Result': fastq_bam_check_result,
-                                                'Worksheet': worksheet_name}, ignore_index=True)
+        tshc_fastq_bam_check_result = 'PASS'
+
+    check_result_df = check_result_df.append({'Check': tshc_fastq_bam_check,
+                                              'Description': tshc_fastq_bam_check_des,
+                                              'Result': tshc_fastq_bam_check_result,
+                                              'Worksheet': worksheet_name}, ignore_index=True)
 
     return check_result_df
 
-def generate_html_output(check_result_df, run_details_df, panel, bed_1, bed_2):
+
+def tshc_generate_html_output(check_result_df, run_details_df, panel, bed_1, bed_2):
     '''
     Creating a static HTML file to display the results to the Clinical Scientist reviewing the quality check report.
     This function calls the format_bed_files function to add in bed file information.
@@ -296,10 +302,11 @@ def generate_html_output(check_result_df, run_details_df, panel, bed_1, bed_2):
     html = f'<!DOCTYPE html><html><head>{style}</head><body>{report_head}{run_sub}{run_details}{check_sub}{check_details}</body></hml>'
 
     # Add class to PASS/FAIL to colour code
-    html = re.sub(r"<td>PASS</td>",r"<td class='PASS'>PASS</td>", html)
-    html = re.sub(r"<td>FAIL</td>",r"<td class='FAIL'>FAIL</td>", html)
+    html = re.sub(r"<td>PASS</td>", r"<td class='PASS'>PASS</td>", html)
+    html = re.sub(r"<td>FAIL</td>", r"<td class='FAIL'>FAIL</td>", html)
 
-    file_name = "_".join(run_details_df['Worksheet'].values.tolist()) + '_TSHC_quality_checks.html'
+    file_name = "_".join(
+        run_details_df['Worksheet'].values.tolist()) + '_TSHC_quality_checks.html'
     return file_name, html
 
 
@@ -319,23 +326,26 @@ def format_bed_files(run_html, bed_1, bed_2):
     run_html = re.sub(f'{bed_2_search}', f'{bed_2_html}', run_html)
 
     # rename dataframe bed_table to bed_table... css classes cannot have spaces
-    run_html = re.sub('<td><table border="1" class="dataframe bed_table">', '<td><table border="1" class="bed_table">', run_html)
+    run_html = re.sub('<td><table border="1" class="dataframe bed_table">',
+                      '<td><table border="1" class="bed_table">', run_html)
 
     return run_html
 
-def run_details(cmd,xls_rep,run_details_df):
+
+def tshc_run_details(cmd, xls_rep, run_details_df):
     '''
     Collect the following run details from the commandline_usage_logfile and excel report
         1) CMD log file- Worksheet number and experiment name
         2) excel report- Worksheet number, AB threshold, pipeline version and BED files
     Add run details to run details_df
     '''
-    bed_files = []
-    bed_df = pd.DataFrame(columns=['Target bed', 'Refined bed', 'Coverage bed'])
+    bed_df = pd.DataFrame(
+        columns=['Target bed', 'Refined bed', 'Coverage bed'])
 
     # get ws names for the cmd file and
     cmd_ws = re.search(r'(\d{6})\.commandline_usage_logfile', cmd)
-    xls_ws = re.search(r'(\d{6})-\d{2}-D\d{2}-\d{5}-\w{2,3}-\w+-\d{3}_S\d+\.v\d\.\d\.\d-results\.xlsx', xls_rep)
+    xls_ws = re.search(
+        r'(\d{6})-\d{2}-D\d{2}-\d{5}-\w{2,3}-\w+-\d{3}_S\d+\.v\d\.\d\.\d-results\.xlsx', xls_rep)
 
     if cmd_ws == None:
         raise Exception('Input error- issue with commandline_usage_logfile')
@@ -347,28 +357,36 @@ def run_details(cmd,xls_rep,run_details_df):
 
     # check that the cmd and xls report are from the same worksheet
     if cmd_ws != xls_ws:
-        raise Exception('The worksheet numbers: {} and {} do not match!'.format(cmd_ws, xls_ws))
+        raise Exception(
+            'The worksheet numbers: {} and {} do not match!'.format(cmd_ws, xls_ws))
 
     worksheet = cmd_ws
 
     # get experiment name from command output
     with open(cmd, 'r') as file:
         cmd_text = file.read()
-    search_term = r'-s\s\n\/network\/sequenced\/MiSeq_data\/(TSHC)\/.*(?:' + re.escape(worksheet) + r')?\/(\d{6}_M\d{5}_\d{4}_\d{9}-\w{5})\/.*'
+    search_term = r'-s\s\n\/network\/sequenced\/MiSeq_data\/(TSHC)\/.*(?:' + re.escape(
+        worksheet) + r')?\/(\d{6}_M\d{5}_\d{4}_\d{9}-\w{5})\/.*'
 
     try:
-      experiment_name = re.search(search_term, cmd_text).group(2)
+        experiment_name = re.search(search_term, cmd_text).group(2)
     except:
-      raise Exception("Command line log file check fail- Check path in command line log file vs regex")
+        raise Exception(
+            "Command line log file check fail- Check path in command line log file vs regex")
 
     # get pipeline version, bed file names and AB threshold
     xls = pd.ExcelFile(xls_rep)
     config_df = pd.read_excel(xls, 'config_parameters')
-    allele_balance = config_df[config_df['key']=='AB_threshold']['variable'].values[0]
-    pipe_version = config_df[config_df['key']=='pipeline_version']['variable'].values[0]
-    target_bed = config_df[config_df['key']=='target_regions']['variable'].values[0].split('/')[-1]
-    refined_target_bed = config_df[config_df['key']=='refined_target_regions']['variable'].values[0].split('/')[-1]
-    coverage_bed = config_df[config_df['key']=='coverage_regions']['variable'].values[0].split('/')[-1]
+    allele_balance = config_df[config_df['key']
+                               == 'AB_threshold']['variable'].values[0]
+    pipe_version = config_df[config_df['key'] ==
+                             'pipeline_version']['variable'].values[0]
+    target_bed = config_df[config_df['key'] ==
+                           'target_regions']['variable'].values[0].split('/')[-1]
+    refined_target_bed = config_df[config_df['key'] ==
+                                   'refined_target_regions']['variable'].values[0].split('/')[-1]
+    coverage_bed = config_df[config_df['key'] ==
+                             'coverage_regions']['variable'].values[0].split('/')[-1]
 
     bed_file_table = f'{worksheet}_bed_files'
 
@@ -376,10 +394,11 @@ def run_details(cmd,xls_rep,run_details_df):
         'Target bed': target_bed,
         'Refined bed': refined_target_bed,
         'Coverage bed': coverage_bed
-        }, ignore_index=True)
+    }, ignore_index=True)
 
     bed_df = bed_df.transpose()
-    bed_html = bed_df.to_html(justify='left', header=None, escape=True, classes='bed_table', border=0)
+    bed_html = bed_df.to_html(
+        justify='left', header=None, escape=True, classes='bed_table', border=0)
 
     bed = [bed_html, bed_file_table]
 
@@ -392,46 +411,52 @@ def run_details(cmd,xls_rep,run_details_df):
 
     return run_details_df, bed
 
+
 def tshc_main(ws_1, ws_2):
     '''
     A function to organise the TSHC output quality check function calls
 
     '''
 
-    xls_rep_1, xls_rep_2, neg_rep, fastq_bam_1, fastq_bam_2, kin_xls, vcf_dir_1, vcf_dir_2, cmd_log_1, cmd_log_2, panel = get_inputs(ws_1, ws_2)
+    xls_rep_1, xls_rep_2, neg_rep, fastq_bam_1, fastq_bam_2, kin_xls, vcf_dir_1, vcf_dir_2, cmd_log_1, cmd_log_2, panel = tshc_get_inputs(
+        ws_1, ws_2)
 
     pd.set_option('display.max_colwidth', -1)
-    check_result_df = pd.DataFrame(columns=[ 'Worksheet','Check', 'Description','Result'])
-    run_details_df = pd.DataFrame(columns=['Worksheet', 'Pipeline version', 'Experiment name', 'Bed files', 'AB threshold'])
+    check_result_df = pd.DataFrame(
+        columns=['Worksheet', 'Check', 'Description', 'Result'])
+    run_details_df = pd.DataFrame(columns=[
+                                  'Worksheet', 'Pipeline version', 'Experiment name', 'Bed files', 'AB threshold'])
 
     # ws_1 checks
-    check_result_df = results_excel_check(xls_rep_1, check_result_df)
-    check_result_df = vcf_dir_check(vcf_dir_1, check_result_df)
-    check_result_df = fastq_bam_check(fastq_bam_1, check_result_df)
+    check_result_df = tshc_results_excel_check(xls_rep_1, check_result_df)
+    check_result_df = tshc_vcf_dir_check(vcf_dir_1, check_result_df)
+    check_result_df = tshc_fastq_bam_check(fastq_bam_1, check_result_df)
 
     # ws_2 checks
-    check_result_df = results_excel_check(xls_rep_2, check_result_df)
-    check_result_df = vcf_dir_check(vcf_dir_2, check_result_df)
-    check_result_df = fastq_bam_check(fastq_bam_2, check_result_df)
+    check_result_df = tshc_results_excel_check(xls_rep_2, check_result_df)
+    check_result_df = tshc_vcf_dir_check(vcf_dir_2, check_result_df)
+    check_result_df = tshc_fastq_bam_check(fastq_bam_2, check_result_df)
 
     # pair checks
-    check_result_df = neg_excel_check(neg_rep, check_result_df)
-    check_result_df = kinship_check(kin_xls, check_result_df)
+    check_result_df = tshc_neg_excel_check(neg_rep, check_result_df)
+    check_result_df = tshc_kinship_check(kin_xls, check_result_df)
 
     # run details
-    run_details_df, bed_1 = run_details(cmd_log_1, xls_rep_1, run_details_df)
-    run_details_df, bed_2 = run_details(cmd_log_2, xls_rep_2, run_details_df)
+    run_details_df, bed_1 = tshc_run_details(
+        cmd_log_1, xls_rep_1, run_details_df)
+    run_details_df, bed_2 = tshc_run_details(
+        cmd_log_2, xls_rep_2, run_details_df)
 
     # sort
     check_result_df = check_result_df.sort_values(by=['Worksheet'])
     run_details_df = run_details_df.sort_values(by=['Worksheet'])
-    #create static html output
-    name, html_report = generate_html_output(check_result_df,run_details_df, panel, bed_1, bed_2)
+    # create static html output
+    name, html_report = tshc_generate_html_output(
+        check_result_df, run_details_df, panel, bed_1, bed_2)
 
-    # write html report to both results directories
     ws_1_out = args.ws_1
     ws_2_out = args.ws_2
-
+    # save HTML report to ws_1 and ws_2 output directories
     if args.out_dir == None:
         print(f'Saving {name} report to {ws_1_out} and {ws_2_out}')
         os.chdir(ws_1_out)
@@ -441,10 +466,12 @@ def tshc_main(ws_1, ws_2):
         with open(name, 'w') as file:
             file.write(html_report)
     else:
+        # save HTML report to out dir specified
         print(f'Saving {name} report to {args.out_dir}')
         os.chdir(args.out_dir)
         with open(name, 'w') as file:
             file.write(html_report)
+
 
 def assign_panel(ws_1, ws_2, sample_sheet):
     '''
@@ -459,84 +486,92 @@ def assign_panel(ws_1, ws_2, sample_sheet):
     else:
         raise Exception('Error: Panel specified not recognised.')
 
+
 def ho_main(panel, ws_1, sample_sheet):
     '''
     A function to organise the HO function calls
 
     The following functions must be run to produce the quality check report:
 
-    1. Assign varaiables for samples in worksheet (sort_ho_inputs)
+    1. Assign varaiables for samples in worksheet (ho_sort_inputs)
     2. get_run details table 
     3. Run 9 independent checks and create output df
 
     '''
-    ho_check_df = pd.DataFrame(columns=['Worksheet','Check', 'Description','Result'])    
+    ho_check_df = pd.DataFrame(
+        columns=['Worksheet', 'Check', 'Description', 'Result'])
 
-    #set gene coverage thresholds for TSMP (200x) and CLL (300x)
+    # set gene coverage thresholds for TSMP (200x) and CLL (300x)
     if panel == 'TSMP':
         gene_cov_thres = 200
     if panel == 'CLL':
         gene_cov_thres = 300
     # Pipeline checks run details
-    ho_inp = sort_ho_inputs(panel, ws_1, sample_sheet)
-    run_details_df = run_details_ho(ho_inp)
+    ho_inp = ho_sort_inputs(panel, ws_1, sample_sheet)
+    run_details_df = ho_run_details(ho_inp)
     # Pipeline check results
     pipeline_check_df, file_size_df = ho_vcf_check(ho_inp, ho_check_df)
     # QC summary check results
-    qcs_result_df, max_row_exon_df, ho_neg_table_df, alt_df = ho_neg_checks(ho_inp, ho_check_df)
-    qcs_result_df, verify_fail_df = verifybamid_check(ho_inp, qcs_result_df)
+    qcs_result_df, max_row_exon_df, ho_neg_table_df, alt_df = ho_neg_checks(
+        ho_inp, ho_check_df)
+    qcs_result_df, verify_fail_df = ho_verifybamid_check(ho_inp, qcs_result_df)
     qcs_result_df = ho_sry_check(ho_inp, qcs_result_df)
-    # Pre analysis checks results 
+    # Pre analysis checks results
     pac_result_df, flt3_fail_df = ho_flt3_check(ho_inp, ho_check_df)
-    pac_result_df, exon_fail_df, gene_fail_df = ho_coverage_check(ho_inp, pac_result_df, gene_cov_thres)
+    pac_result_df, exon_fail_df, gene_fail_df = ho_coverage_check(
+        ho_inp, pac_result_df, gene_cov_thres)
     file_size_df = file_size_df.transpose()
     max_row_exon_df = max_row_exon_df.transpose()
-    
+
     # list of dicts and additional info used in modals and sub tables
     extra_info_list = [
         ho_neg_table_df, file_size_df, max_row_exon_df,
-        exon_fail_df, gene_fail_df, alt_df, 
+        exon_fail_df, gene_fail_df, alt_df,
         verify_fail_df, flt3_fail_df, gene_cov_thres
-        ]
+    ]
 
     ho_generate_html_output(
         run_details_df,
         qcs_result_df,
         pipeline_check_df,
-        pac_result_df, 
+        pac_result_df,
         extra_info_list,
         ho_inp
-        )
+    )
 
 
-def sort_ho_inputs(panel, ws_1, sample_sheet):
+def ho_sort_inputs(panel, ws_1, sample_sheet):
     '''
-    For the majority of checks use sample_1 one, for FLT3 check use whole list.
+    Get paths to output files and store in ho_input dictionary
     '''
 
     worksheet = re.search(panel_regex, ws_1).group(2)
     if sample_sheet == None:
-        raise Exception("A samplesheet has not been provided... check the command")
+        raise Exception(
+            "A samplesheet has not been provided... check the command")
 
     pat_results_list = []
 
     excel_base = ws_1 + f'excel_reports_{panel}_{worksheet}/'
     results_list = os.listdir(excel_base)
-    excel_df = pd.DataFrame(results_list, columns=['sample_name'])    
+    excel_df = pd.DataFrame(results_list, columns=['sample_name'])
 
     # sort all results
     neg_xls = excel_df[excel_df['sample_name'].str.contains('Neg|NEG')]
-    pat_results = excel_df[~excel_df['sample_name'].str.contains('Neg|NEG|-fastq-bam-check|merged-variants|SRY')]
+    pat_results = excel_df[~excel_df['sample_name'].str.contains(
+        'Neg|NEG|-fastq-bam-check|merged-variants|SRY')]
     sry_xls = excel_df[excel_df['sample_name'].str.contains('SRY')]
-    merged_xls = excel_df[excel_df['sample_name'].str.contains('merged-variants')]
+    merged_xls = excel_df[excel_df['sample_name'].str.contains(
+        'merged-variants')]
 
     # get abs path for each df
-    neg_xls = f'{excel_base}'+ neg_xls['sample_name'].squeeze()
+    neg_xls = f'{excel_base}' + neg_xls['sample_name'].squeeze()
     pat_results = pat_results.squeeze().to_list()
     for res in pat_results:
         res_path = f'{excel_base}' + res
         pat_results_list.append(res_path)
-    cmd_log_file = os.path.abspath(ws_1) + f'/{worksheet}.commandline_usage_logfile'
+    cmd_log_file = os.path.abspath(
+        ws_1) + f'/{worksheet}.commandline_usage_logfile'
     vcf_dir = os.path.abspath(ws_1) + f'/vcfs_{panel}_{worksheet}/'
     if sry_xls.empty == True:
         sry_xls = None
@@ -545,21 +580,22 @@ def sort_ho_inputs(panel, ws_1, sample_sheet):
 
     merged_xls = f'{excel_base}' + merged_xls['sample_name'].squeeze()
 
-    ho_inp =     {
-    'panel': panel,
-    'worksheet': worksheet,
-    'negative': neg_xls,
-    'pat_results': pat_results_list, 
-    'cmd_log_file': cmd_log_file,
-    'vcf_directory': vcf_dir,
-    'sry_excel': sry_xls,
-    'merged_variant_xls': merged_xls,
-    'sample_sheet': sample_sheet
+    ho_inp = {
+        'panel': panel,
+        'worksheet': worksheet,
+        'negative': neg_xls,
+        'pat_results': pat_results_list,
+        'cmd_log_file': cmd_log_file,
+        'vcf_directory': vcf_dir,
+        'sry_excel': sry_xls,
+        'merged_variant_xls': merged_xls,
+        'sample_sheet': sample_sheet
     }
 
     return ho_inp
 
-def run_details_ho(ho_inp):
+
+def ho_run_details(ho_inp):
     '''
     Retrieve run details information from command line log file
     '''
@@ -570,28 +606,32 @@ def run_details_ho(ho_inp):
     with open(cmd, 'r') as file:
         cmd_text = file.read()
     # Regex to pull out experiment name and pipeline version from commandline file.
-    # Worksheet name escaped to enable the running of CLL validation runs 
-    exp_term = r'-s\s\n\/network\/sequenced\/MiSeq_data\/(Nextera_Rapid_Capture\/TruSight_Myeloid_Panel_v3|OGT_CLL|TSMP_Flex)\/.*(?:' + re.escape(worksheet) + r')?\/(\d{6}_M\d{5}_\d{4}_\d{9}-\w{5})\/.*'
+    # Worksheet name escaped to enable the running of CLL validation runs
+    exp_term = r'-s\s\n\/network\/sequenced\/MiSeq_data\/(Nextera_Rapid_Capture\/TruSight_Myeloid_Panel_v3|OGT_CLL|TSMP_Flex)\/.*(?:' + re.escape(
+        worksheet) + r')?\/(\d{6}_M\d{5}_\d{4}_\d{9}-\w{5})\/.*'
     pipe_term = r'Pipeline\scommand:\n\/opt\/scripts\/MiSeq-Universal-(v[\.]?\d\.\d\.\d)\/MiSeq-master-pipeline.py'
     try:
-      exp_name = re.search(exp_term, cmd_text).group(2)
-      pipe_version = re.search(pipe_term, cmd_text).group(1)
+        exp_name = re.search(exp_term, cmd_text).group(2)
+        pipe_version = re.search(pipe_term, cmd_text).group(1)
     except:
-      raise Exception("Command line log file check fail- Check path in command line log file vs regex")
+        raise Exception(
+            "Command line log file check fail- Check path in command line log file vs regex")
     check_title = 'Run details'
     run_details_des = 'Manual check of the worksheet number, panel, pipeline version and experiment name.'
 
-    ho_run_details_df = pd.DataFrame(columns=['Worksheet', 'Check','Panel', 'Pipeline version', 'Experiment name', 'Description'])
+    ho_run_details_df = pd.DataFrame(columns=[
+                                     'Worksheet', 'Check', 'Panel', 'Pipeline version', 'Experiment name', 'Description'])
 
     ho_details_df = ho_run_details_df.append({'Worksheet': worksheet,
-                                            'Check': check_title,
-                                            'Panel': panel,
-                                            'Pipeline version': pipe_version,
-                                            'Experiment name': exp_name,
-                                            'Description': run_details_des
-                                            }, ignore_index=True)
+                                              'Check': check_title,
+                                              'Panel': panel,
+                                              'Pipeline version': pipe_version,
+                                              'Experiment name': exp_name,
+                                              'Description': run_details_des
+                                              }, ignore_index=True)
 
     return ho_details_df
+
 
 def ho_vcf_check(ho_inp, qcs_result_df):
     '''
@@ -602,20 +642,20 @@ def ho_vcf_check(ho_inp, qcs_result_df):
     sample_sheet_path = ho_inp['sample_sheet']
     vcf_dir_path = ho_inp['vcf_directory']
     sample_sheet_xls = pd.read_csv(sample_sheet_path)
-    # split sample sheet into section containing sample names 
+    # split sample sheet into section containing sample names
     # The start position of the data section differs between TSMP and CLL
     if ho_inp['panel'] == 'TSMP':
-      column_list = sample_sheet_xls.iloc[19:20].squeeze().to_list()
-      sample_df = pd.DataFrame(sample_sheet_xls.iloc[20:])
+        column_list = sample_sheet_xls.iloc[19:20].squeeze().to_list()
+        sample_df = pd.DataFrame(sample_sheet_xls.iloc[20:])
     elif ho_inp['panel'] == 'CLL':
-      column_list = sample_sheet_xls.iloc[18:19].squeeze().to_list()
-      sample_df = pd.DataFrame(sample_sheet_xls.iloc[19:])
+        column_list = sample_sheet_xls.iloc[18:19].squeeze().to_list()
+        sample_df = pd.DataFrame(sample_sheet_xls.iloc[19:])
     else:
-      raise "Check SampleSheet... The Sample_ID headers are not in the correct place."
+        raise "Check SampleSheet... The Sample_ID headers are not in the correct place."
 
     sample_df.columns = column_list
     num_sample = sample_df['Sample_ID'].count()
-
+    # The number of vcfs present in the VCF output folder should be 2x number of samples on samplesheet
     num_exp = num_sample * 2
 
     vcf_search = vcf_dir_path + '*.vcf*'
@@ -624,16 +664,16 @@ def ho_vcf_check(ho_inp, qcs_result_df):
     file_size = []
     for file in vcf_files:
         if file.endswith('.gz'):
-          size = os.stat(file).st_size
-          file_size.append(size)
-
+            size = os.stat(file).st_size
+            file_size.append(size)
+    # Get the min and max file size of vcfs
     min_file = convert_unit(min(file_size))
     max_file = convert_unit(max(file_size))
-    file_size_df = pd.DataFrame(columns=[ 'Min','Max'])
+    file_size_df = pd.DataFrame(columns=['Min', 'Max'])
     file_size_df = file_size_df.append({
         'Min': min_file,
         'Max': max_file
-        }, ignore_index=True)
+    }, ignore_index=True)
 
     worksheet = ho_inp['worksheet']
     vcf_check = 'VCF count check'
@@ -646,10 +686,9 @@ def ho_vcf_check(ho_inp, qcs_result_df):
         vcf_check_res = 'PASS'
 
     qcs_result_df = qcs_result_df.append({'Check': vcf_check,
-                                            'Description': vcf_check_des,
-                                            'Result': vcf_check_res,
-                                            'Worksheet': worksheet }, ignore_index=True)
-
+                                          'Description': vcf_check_des,
+                                          'Result': vcf_check_res,
+                                          'Worksheet': worksheet}, ignore_index=True)
 
     return qcs_result_df, file_size_df
 
@@ -676,7 +715,7 @@ def ho_neg_checks(ho_inp, qcs_result_df):
     A pass/fail criteria is applied and the results are added to the ho_check_results_df
     '''
 
-    panel = ho_inp['panel'] 
+    panel = ho_inp['panel']
     if panel == 'TSMP':
         exon_target = 491
     elif panel == 'CLL':
@@ -705,7 +744,7 @@ def ho_neg_checks(ho_inp, qcs_result_df):
     max_row_exon = neg_exon_df.loc[neg_exon_df['Max'] == max_num_exons]
     max_row_exon = max_row_exon[['Gene', 'Exon', 'Max']]
 
-    #Calculate adjusted sensitivity required
+    # Calculate adjusted sensitivity required
     if max_num_exons <= 30:
         sensitivity = '5%'
     else:
@@ -727,44 +766,44 @@ def ho_neg_checks(ho_inp, qcs_result_df):
         neg_depth_res = 'PASS'
 
     neg_calls_check = 'Negative calls check'
-    neg_calls_check_des = f'There are no calls in the negative control. _neg_calls_'    
+    neg_calls_check_des = f'There are no calls in the negative control. _neg_calls_'
 
     if neg_call_df.shape[0] > 0:
         neg_zero_res = 'FAIL'
     else:
         neg_zero_res = 'PASS'
 
-    ## singleton and num ATL reads (inc details button)
+    # singleton and num ATL reads (inc details button)
     ho_neg_table_df, alt_df, alt_var = ho_neg_summary_table(ho_inp)
     sensitivity = f'Max reads in negative = {max_num_exons}. Analyse to {sensitivity}'
     max_row_exon['Sensitivity'] = sensitivity
 
-
     qcs_result_df = qcs_result_df.append({'Check': neg_exon_check,
-                                            'Description': neg_exon_check_des,
-                                            'Result': neg_exon_res,
-                                            'Worksheet': worksheet}, ignore_index=True)
-   
+                                          'Description': neg_exon_check_des,
+                                          'Result': neg_exon_res,
+                                          'Worksheet': worksheet}, ignore_index=True)
+
     qcs_result_df = qcs_result_df.append({'Check': neg_depth_check,
-                                            'Description': neg_depth_check_des,
-                                            'Result': neg_depth_res,
-                                            'Worksheet': worksheet}, ignore_index=True)
+                                          'Description': neg_depth_check_des,
+                                          'Result': neg_depth_res,
+                                          'Worksheet': worksheet}, ignore_index=True)
 
     qcs_result_df = qcs_result_df.append({'Check': neg_calls_check,
-                                            'Description': neg_calls_check_des,
-                                            'Result': neg_zero_res,
-                                            'Worksheet': worksheet}, ignore_index=True)
+                                          'Description': neg_calls_check_des,
+                                          'Result': neg_zero_res,
+                                          'Worksheet': worksheet}, ignore_index=True)
 
     return qcs_result_df, max_row_exon, ho_neg_table_df, alt_df
 
-def verifybamid_check(ho_inp, qcs_result_df):
+
+def ho_verifybamid_check(ho_inp, qcs_result_df):
     '''
     Checks the verifybamid tab to ensure samples do not exceed contamination 10% threshold.
     '''
-
+    # threshold set by HO Clinical Scientists
     threshold = 10.0
 
-    # pick the first sample results xls verifybamid common across samples 
+    # pick the first sample results xls as verifybamid information common across samples
     xls_path = ho_inp['pat_results'][0]
 
     xls = pd.ExcelFile(xls_path)
@@ -783,22 +822,23 @@ def verifybamid_check(ho_inp, qcs_result_df):
 
     # Create df of failed samples
     verifybamid_df['%CONT'] = verifybamid_df['%CONT'].astype(float)
-    verifybamid_df = verifybamid_df[['SAMPLE','%CONT']]
+    verifybamid_df = verifybamid_df[['SAMPLE', '%CONT']]
     verify_fail_df = verifybamid_df[verifybamid_df['%CONT'] > 10.0]
-    verify_fail_df = verify_fail_df.replace(to_replace=r'.*(D\d\d-\d{5}).*', value=r'\1', regex=True)
+    verify_fail_df = verify_fail_df.replace(
+        to_replace=r'.*(D\d\d-\d{5}).*', value=r'\1', regex=True)
     qcs_result_df = qcs_result_df.append({'Check': verifybamid_check,
-                                            'Description': verifybamid_check_des,
-                                            'Result': verifybamid_res,
-                                            'Worksheet': worksheet}, ignore_index=True)
+                                          'Description': verifybamid_check_des,
+                                          'Result': verifybamid_res,
+                                          'Worksheet': worksheet}, ignore_index=True)
 
     return qcs_result_df, verify_fail_df
+
 
 def ho_sry_check(ho_inp, qcs_result_df):
     '''
     Check for the presence of an SRY output xls.
     '''
 
-    panel = ho_inp['panel']
     sry_xls = ho_inp['sry_excel']
     worksheet = ho_inp['worksheet']
 
@@ -813,20 +853,22 @@ def ho_sry_check(ho_inp, qcs_result_df):
         sry_check_res = 'PASS'
 
     qcs_result_df = qcs_result_df.append({'Check': sry_check,
-                                            'Description': sry_check_des,
-                                            'Result': sry_check_res,
-                                            'Worksheet': worksheet}, ignore_index=True) 
+                                          'Description': sry_check_des,
+                                          'Result': sry_check_res,
+                                          'Worksheet': worksheet}, ignore_index=True)
 
     return qcs_result_df
 
+
 def ho_flt3_check(ho_inp, qcs_result_df):
     '''
-    If any variants are present on FLT3 tab then the check will pass
+    If any variants are present on FLT3 tab then the check will pass. FLT3 tab is only present for TSMP panels.
+    This check will always return a 'FAIL' for CLL QC reports.
     '''
     cll_ws_check = False
     sample_list = ho_inp['pat_results']
     flt3_check_res = None
-    flt3_fail_df = pd.DataFrame(columns=['Sample','AD', 'ALT-REF'])
+    flt3_fail_df = pd.DataFrame(columns=['Sample', 'AD', 'ALT-REF'])
 
     # try except block handles when FLT3 tab not present e.g. CLL panel
     for sample in sample_list:
@@ -835,15 +877,18 @@ def ho_flt3_check(ho_inp, qcs_result_df):
             flt3_df = pd.read_excel(xls, 'FLT3')
             if not flt3_df.empty:
                 sample_name = re.search(r'D\d\d-\d{5}', sample)[0]
-                flt3 = flt3_df[['AD','ALT-REF', 'Grouped AR (ALT-REF)','Grouped AB (ALT-REF)']]   
+                flt3 = flt3_df[['AD', 'ALT-REF',
+                                'Grouped AR (ALT-REF)', 'Grouped AB (ALT-REF)']]
                 flt3 = flt3_df.assign(Sample=f'{sample_name}')
-                flt3_fail_df = flt3_fail_df.append(flt3, ignore_index=True, sort=True)
+                flt3_fail_df = flt3_fail_df.append(
+                    flt3, ignore_index=True, sort=True)
         except:
             cll_ws_check = True
-            
+
     # Handle scenrio where FLT3 tab is empty for TSMP worksheets
     if flt3_fail_df.empty == False:
-        flt3_fail_df = flt3_fail_df[['Sample','AD','ALT-REF', 'Grouped AR (ALT-REF)','Grouped AB (ALT-REF)']]  
+        flt3_fail_df = flt3_fail_df[[
+            'Sample', 'AD', 'ALT-REF', 'Grouped AR (ALT-REF)', 'Grouped AB (ALT-REF)']]
         flt3_fail_df = flt3_fail_df.sort_values(by=['Sample'])
     worksheet = ho_inp['worksheet']
     flt3_check = 'FLT3 ITD check'
@@ -857,13 +902,14 @@ def ho_flt3_check(ho_inp, qcs_result_df):
         raise Exception("Error- Check FLT3 tabs!")
 
     qcs_result_df = qcs_result_df.append({'Check': flt3_check,
-                                            'Description': flt3_check_des,
-                                            'Result': flt3_check_res,
-                                            'Worksheet': worksheet}, ignore_index=True) 
+                                          'Description': flt3_check_des,
+                                          'Result': flt3_check_res,
+                                          'Worksheet': worksheet}, ignore_index=True)
 
     return qcs_result_df, flt3_fail_df
 
-def ho_coverage_check(ho_inp, qcs_result_df, gene_cov_thres): 
+
+def ho_coverage_check(ho_inp, qcs_result_df, gene_cov_thres):
     '''
     1. Merge all gene coverage and exon coverage in one
     2. Check if >80% for Coverage-gene in Coverage-gene tab (assign PASS/FAIL)
@@ -879,29 +925,33 @@ def ho_coverage_check(ho_inp, qcs_result_df, gene_cov_thres):
         gene_cov_df = pd.read_excel(sample, 'Coverage-gene')
         # drop NaN values from bottom of sheet
         gene_cov_df = gene_cov_df.dropna(subset=['Worksheet', 'Sample'])
-        gene_cov_df = gene_cov_df[['Sample','Gene',f'{pct_header}']]
-        
+        gene_cov_df = gene_cov_df[['Sample', 'Gene', f'{pct_header}']]
+
         exon_cov_df = pd.read_excel(sample, 'Coverage-details')
         # drop NaN values from bottom of sheet
         exon_cov_df = exon_cov_df.dropna(subset=['SAMPLE'])
-        exon_cov_df = exon_cov_df[['SAMPLE','GENE','Exon','Min_depth']]
+        exon_cov_df = exon_cov_df[['SAMPLE', 'GENE', 'Exon', 'Min_depth']]
         gene_cov_data.append(gene_cov_df)
         exon_cov_data.append(exon_cov_df)
 
     ws_gene_cov_df = pd.concat(gene_cov_data, ignore_index=True)
     ws_exon_cov_df = pd.concat(exon_cov_data, ignore_index=True)
-    
-    #Show only Dnumbers in final table
-    ws_gene_cov_df['Sample'] = ws_gene_cov_df['Sample'].str.extract(r'(D\d\d-\d{5})', expand=True)
-    ws_exon_cov_df['SAMPLE'] = ws_exon_cov_df['SAMPLE'].str.extract(r'(D\d\d-\d{5})', expand=True)
-    
-    gene_fail_df = ws_gene_cov_df[ws_gene_cov_df[f'{pct_header}'] < 80].sort_values(by='Sample')
-    exon_fail_df = ws_exon_cov_df[ws_exon_cov_df['Min_depth'] < 100].sort_values(by='SAMPLE')
+
+    # Show only Dnumbers in final table
+    ws_gene_cov_df['Sample'] = ws_gene_cov_df['Sample'].str.extract(
+        r'(D\d\d-\d{5})', expand=True)
+    ws_exon_cov_df['SAMPLE'] = ws_exon_cov_df['SAMPLE'].str.extract(
+        r'(D\d\d-\d{5})', expand=True)
+
+    gene_fail_df = ws_gene_cov_df[ws_gene_cov_df[f'{pct_header}'] < 80].sort_values(
+        by='Sample')
+    exon_fail_df = ws_exon_cov_df[ws_exon_cov_df['Min_depth'] < 100].sort_values(
+        by='SAMPLE')
     worksheet = ho_inp['worksheet']
     cov_gene_check = f'Gene {str(gene_cov_thres)}x check'
     cov_gene_check_des = f'All samples in this worksheet have genes at >80% {str(gene_cov_thres)}x.'
 
-    #gene cov logic
+    # gene cov logic
     if gene_fail_df.shape[0] > 0:
         cov_gene_check_res = 'FAIL'
     else:
@@ -916,16 +966,17 @@ def ho_coverage_check(ho_inp, qcs_result_df, gene_cov_thres):
         cov_exon_check_res = 'PASS'
 
     qcs_result_df = qcs_result_df.append({'Check': cov_gene_check,
-                                            'Description': cov_gene_check_des,
-                                            'Result': cov_gene_check_res,
-                                            'Worksheet': worksheet}, ignore_index=True) 
+                                          'Description': cov_gene_check_des,
+                                          'Result': cov_gene_check_res,
+                                          'Worksheet': worksheet}, ignore_index=True)
 
     qcs_result_df = qcs_result_df.append({'Check': cov_exon_check,
-                                            'Description': cov_exon_check_des,
-                                            'Result': cov_exon_check_res,
-                                            'Worksheet': worksheet}, ignore_index=True) 
+                                          'Description': cov_exon_check_des,
+                                          'Result': cov_exon_check_res,
+                                          'Worksheet': worksheet}, ignore_index=True)
 
     return [qcs_result_df, exon_fail_df, gene_fail_df]
+
 
 def ho_neg_summary_table(ho_inp):
     '''
@@ -938,33 +989,35 @@ def ho_neg_summary_table(ho_inp):
     xls = pd.ExcelFile(ho_inp['negative'])
     variants_all_df = pd.read_excel(xls, 'Variants-all-data')
 
-    #singleton summary
-    singleton = variants_all_df[variants_all_df['FILTER'].str.contains('singleton')].shape[0]
+    # singleton summary
+    singleton = variants_all_df[variants_all_df['FILTER'].str.contains(
+        'singleton')].shape[0]
     num_var = variants_all_df.shape[0]
     singleton_res = f'{singleton}/{num_var} singletons'
 
-    alt_df = variants_all_df[variants_all_df['Alleles'].str.contains(r'\d\d?,\d\d')]
+    alt_df = variants_all_df[variants_all_df['Alleles'].str.contains(
+        r'\d\d?,\d\d')]
     alt_var = alt_df.shape[0]
     alt_var_res = f'{alt_var} calls >= 10 alt reads'
 
     # Show only SAMPLE -> AB columns for modal
-    alt_df = alt_df.loc[:,'SAMPLE':'AB']
+    alt_df = alt_df.loc[:, 'SAMPLE':'AB']
 
     ho_neg_table_df = ho_neg_table_df.append({'Singletons': singleton_res,
-                                            'ALT reads': alt_var_res,
-                                            }, ignore_index=True) 
-
+                                              'ALT reads': alt_var_res,
+                                              }, ignore_index=True)
 
     return [ho_neg_table_df, alt_df, alt_var]
 
+
 def ho_generate_html_output(
-    run_details_df, qcs_result_df, pipeline_check_df,
-    pac_result_df, extra_info_list, ho_inp):
+        run_details_df, qcs_result_df, pipeline_check_df,
+        pac_result_df, extra_info_list, ho_inp):
     '''
     Creating a static HTML file to display the results to the Clinical Scientist reviewing the quality check report.
     This process involves changes directly to the html.
     '''
-    #addign additional variables
+    # assign additional variables
     ho_neg_table_df = extra_info_list[0]
     file_size_df = extra_info_list[1]
     max_row_exon_df = extra_info_list[2]
@@ -972,84 +1025,102 @@ def ho_generate_html_output(
     gene_df = extra_info_list[4]
     alt_df = extra_info_list[5]
     verify_fail_df = extra_info_list[6]
-    flt3_fail_df = extra_info_list[7] 
+    flt3_fail_df = extra_info_list[7]
     gene_cov_thres = extra_info_list[8]
-    
 
     css_classes = ['table', 'table-striped']
 
-    #Create main HTML tables from dfs
-    run_details_html = run_details_df.to_html(classes= css_classes, table_id='run_details_table', index=False, justify='left', border=0)
-    pipeline_check_html = pipeline_check_df.to_html(classes= css_classes, table_id='run_details_check_table', index=False, justify='left', border=0)
-    qcs_results_html = qcs_result_df.to_html(classes= css_classes, table_id='check_table', index=False, justify='left', border=0)
-    pac_results_html = pac_result_df.to_html(classes= css_classes, table_id='check_pac_table', index=False, justify='left', border=0)
+    # Create main HTML tables from dfs
+    run_details_html = run_details_df.to_html(
+        classes=css_classes, table_id='run_details_table', index=False, justify='left', border=0)
+    pipeline_check_html = pipeline_check_df.to_html(
+        classes=css_classes, table_id='run_details_check_table', index=False, justify='left', border=0)
+    qcs_results_html = qcs_result_df.to_html(
+        classes=css_classes, table_id='check_table', index=False, justify='left', border=0)
+    pac_results_html = pac_result_df.to_html(
+        classes=css_classes, table_id='check_pac_table', index=False, justify='left', border=0)
 
-    #Create modal table and handle when dfs are empty- place holder text will be added to the modal.
+    # Create modal table and handle when dfs are empty- place holder text will be added to the modal.
     if gene_df.empty == True:
         gene_df = pd.DataFrame(columns=['Message'])
         gene_mess = f'All samples in this worksheet have genes at >80% {gene_cov_thres}x.'
         gene_df = gene_df.append({'Message': gene_mess}, ignore_index=True)
-        gene_html = gene_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='gene_fail_table', border=0)
+        gene_html = gene_df.to_html(classes=css_classes, header=False,
+                                    index=False, justify='left', table_id='gene_fail_table', border=0)
     else:
-        gene_html = gene_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='gene_fail_table', border=0)
-        
+        gene_html = gene_df.to_html(classes=css_classes, header=True,
+                                    index=False, justify='left', table_id='gene_fail_table', border=0)
+
     if exon_df.empty == True:
         exon_df = pd.DataFrame(columns=['Message'])
         exon_mess = 'All samples in this worksheet have exon coverage at 100X.'
         exon_df = exon_df.append({'Message': exon_mess}, ignore_index=True)
-        exon_html = exon_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='exon_fail_table', border=0)
+        exon_html = exon_df.to_html(classes=css_classes, header=False,
+                                    index=False, justify='left', table_id='exon_fail_table', border=0)
     else:
-        exon_html = exon_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='exon_fail_table', border=0)
+        exon_html = exon_df.to_html(classes=css_classes, header=True,
+                                    index=False, justify='left', table_id='exon_fail_table', border=0)
     if alt_df.empty == True:
         alt_df = pd.DataFrame(columns=['Message'])
         alt_mess = 'The negative sample for this worksheet does not contain any variants with >= 10 alt reads.'
         alt_df = alt_df.append({'Message': alt_mess}, ignore_index=True)
-        alt_html = alt_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='alt_fail_table', border=0)
+        alt_html = alt_df.to_html(classes=css_classes, header=False,
+                                  index=False, justify='left', table_id='alt_fail_table', border=0)
     else:
-        alt_html = alt_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='alt_fail_table', border=0)
+        alt_html = alt_df.to_html(classes=css_classes, header=True,
+                                  index=False, justify='left', table_id='alt_fail_table', border=0)
     if verify_fail_df.empty == True:
         verify_fail_df = pd.DataFrame(columns=['Message'])
         verify_fail_mess = 'All samples in this worksheet have a %CONT score < 10%.'
-        verify_fail_df = verify_fail_df.append({'Message': verify_fail_mess}, ignore_index=True)
-        verify_fail_html = verify_fail_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='verify_fail_table', border=0)
+        verify_fail_df = verify_fail_df.append(
+            {'Message': verify_fail_mess}, ignore_index=True)
+        verify_fail_html = verify_fail_df.to_html(
+            classes=css_classes, header=False, index=False, justify='left', table_id='verify_fail_table', border=0)
     else:
-        verify_fail_html = verify_fail_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='verify_fail_table', border=0)
+        verify_fail_html = verify_fail_df.to_html(
+            classes=css_classes, header=True, index=False, justify='left', table_id='verify_fail_table', border=0)
     if flt3_fail_df.empty == True:
         flt3_fail_df = pd.DataFrame(columns=['Message'])
         flt3_fail_mess = 'No FLT3 ITD variants have been called.'
-        flt3_fail_df = flt3_fail_df.append({'Message': flt3_fail_mess}, ignore_index=True)
-        flt3_fail_html = flt3_fail_df.to_html(classes= css_classes, header=False, index=False, justify='left', table_id='flt3_fail_table', border=0)
+        flt3_fail_df = flt3_fail_df.append(
+            {'Message': flt3_fail_mess}, ignore_index=True)
+        flt3_fail_html = flt3_fail_df.to_html(
+            classes=css_classes, header=False, index=False, justify='left', table_id='flt3_fail_table', border=0)
     else:
-        flt3_fail_html = flt3_fail_df.to_html(classes= css_classes, header=True, index=False, justify='left', table_id='flt3_fail_table', border=0)
+        flt3_fail_html = flt3_fail_df.to_html(
+            classes=css_classes, header=True, index=False, justify='left', table_id='flt3_fail_table', border=0)
 
-    #create non-modal tables
-    neg_details_html = ho_neg_table_df.to_html(classes= css_classes ,table_id='neg_table', index=False, justify='left', border=0)
-    file_size_html = file_size_df.to_html(classes= css_classes, header=None, justify='left', table_id='file_size_table', border=0)
-    max_exon_html = max_row_exon_df.to_html(classes= css_classes, header=None, justify='left', table_id='max_exon_table', border=0)
+    # create non-modal tables. These tables will be present within the description section of the checks table.
+    neg_details_html = ho_neg_table_df.to_html(
+        classes=css_classes, table_id='neg_table', index=False, justify='left', border=0)
+    file_size_html = file_size_df.to_html(
+        classes=css_classes, header=None, justify='left', table_id='file_size_table', border=0)
+    max_exon_html = max_row_exon_df.to_html(
+        classes=css_classes, header=None, justify='left', table_id='max_exon_table', border=0)
 
-    #read in html base file
+    # read in html base file
     with open('HO_base.html', 'r') as file:
         base = file.read()
-        
+
     # Add panel name to title
     panel = ho_inp['panel']
-    base = re.sub(r'_panel_name_', panel, base) 
+    base = re.sub(r'_panel_name_', panel, base)
     # Add main tables
     sub_table_replace = [
-        (r'{run_details_html}',f'{run_details_html}'),
+        (r'{run_details_html}', f'{run_details_html}'),
         (r'{pipeline_check_html}', f'{pipeline_check_html}'),
         (r'{qcs_results_html}', f'{qcs_results_html}'),
         (r'{pac_results_html}', f'{pac_results_html}'),
-        (r'_vcf_min_max_', f'{file_size_html}'), 
-        (r'_neg_exon_depth_', f'{max_exon_html}'), 
+        (r'_vcf_min_max_', f'{file_size_html}'),
+        (r'_neg_exon_depth_', f'{max_exon_html}'),
         (r'_neg_calls_', f'{neg_details_html}')
-    ]    
+    ]
     for old, new in sub_table_replace:
         base = re.sub(old, new, base)
 
     html_report = base
 
-    #get modal template
+    # get modal template
     with open('modal_base.html') as file:
         modal_base = file.read()
 
@@ -1061,12 +1132,14 @@ def ho_generate_html_output(
         flt3_fail_html
     ]
     # set alt_call_num for html report
-    alt_call_num = int(re.search(r'(\d+) calls', ho_neg_table_df['ALT reads'].values[0]).group(1))
+    alt_call_num = int(
+        re.search(r'(\d+) calls', ho_neg_table_df['ALT reads'].values[0]).group(1))
     # add modals to html report
-    html_report = ho_add_modals(html_report, modal_base, modal_tables, alt_call_num, gene_cov_thres)
+    html_report = ho_add_modals(
+        html_report, modal_base, modal_tables, alt_call_num, gene_cov_thres)
     # add PASS/FAIL colour
     colour_replace = [
-        ("<td>PASS</td>","<td style='color:green;'>PASS</td>"),
+        ("<td>PASS</td>", "<td style='color:green;'>PASS</td>"),
         ("<td>FAIL</td>", "<td style='color:red;'>FAIL</td>")
     ]
     for old, new in colour_replace:
@@ -1076,26 +1149,29 @@ def ho_generate_html_output(
     html_name = f'{worksheet_num}_{panel}_quality_checks.html'
 
     ws_1_out = args.ws_1
-
+    # save HTML report into result output dir
     if args.out_dir == None:
         os.chdir(ws_1_out)
         print(f'Saving {html_name} report to {ws_1_out}')
         with open(html_name, 'w') as file:
             file.write(html_report)
     else:
+        # save HTML report into specified out dir
         print(f'Saving {html_name} report to {args.out_dir}')
         os.chdir(args.out_dir)
         with open(html_name, 'w') as file:
             file.write(html_report)
 
+
 def add_nest_tables(check_details, file_html, exon_html):
-    
+
     file_string = r'_vcf_min_max_'
     exon_string = r'_neg_exon_depth_'
 
     check_details = re.sub(f'{file_string}', f'{file_html}', check_details)
     check_details = re.sub(f'{exon_string}', f'{exon_html}', check_details)
     return check_details
+
 
 def ho_add_modals(html_report, modal_base, modal_tables, alt_call_num, gene_cov_thres):
     '''
@@ -1115,8 +1191,8 @@ def ho_add_modals(html_report, modal_base, modal_tables, alt_call_num, gene_cov_
 
     modal_list = [
         (gene_modal_name, gene_modal_title, modal_tables[0]),
-        (exon_modal_name, exon_modal_title, modal_tables[1]), 
-        (alt_modal_name, alt_modal_title, modal_tables[2]), 
+        (exon_modal_name, exon_modal_title, modal_tables[1]),
+        (alt_modal_name, alt_modal_title, modal_tables[2]),
         (verify_modal_name, verify_modal_title, modal_tables[3]),
         (flt3_modal_name, flt3_modal_title, modal_tables[4])
     ]
@@ -1128,7 +1204,7 @@ def ho_add_modals(html_report, modal_base, modal_tables, alt_call_num, gene_cov_
         modal_replace = [
             (r'_modal_name_', f'{modal[0]}'),
             (r'_modal_title_', f'{modal[1]}'),
-            (r'_modal_table_', f'{modal[2]}')   
+            (r'_modal_table_', f'{modal[2]}')
         ]
         for old, new in modal_replace:
             sub_mod = re.sub(old, new, sub_mod)
@@ -1136,16 +1212,16 @@ def ho_add_modals(html_report, modal_base, modal_tables, alt_call_num, gene_cov_
         if modal[0] == 'Low_coverage_genes' or modal[0] == 'Failed_exons':
             pass
         else:
-            sub_mod = re.sub(r'modal-dialog','modal-dialog modal-lg', sub_mod)
+            sub_mod = re.sub(r'modal-dialog', 'modal-dialog modal-lg', sub_mod)
         add_modal_list.append(sub_mod)
-    
+
     failed_gene_modal = add_modal_list[0]
     failed_exon_modal = add_modal_list[1]
     alt_var_modal = add_modal_list[2]
     verify_fail_modal = add_modal_list[3]
     flt3_fail_modal = add_modal_list[4]
 
-    des_modal_pos =  [
+    des_modal_pos = [
         (rf'<td>All samples in this worksheet have genes at &gt;80% {gene_cov_thres}x.</td>',
          f'<td>All samples in this worksheet have genes at &gt;80% {gene_cov_thres}x.{failed_gene_modal}</td>'),
         (r'<td>All samples in this worksheet have exon coverage at 100x.</td>',
@@ -1164,6 +1240,7 @@ def ho_add_modals(html_report, modal_base, modal_tables, alt_call_num, gene_cov_
         html_report = re.sub(old, new, html_report)
 
     return html_report
+
 
 # Generic regex used to extact ws_num etc
 panel_regex = r'\/(TSHC|TSMP|CLL)_(\d{6})_(v[\.]?\d\.\d\.\d)\/'
