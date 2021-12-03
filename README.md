@@ -1,4 +1,4 @@
-# Automated HO and TSHC Quality Checks
+# Automated HO and FC Quality Checks
 
 This script automates the manual quality checks completed by Clinical Scientists within the Haemato-Oncology (HO) and Familial Cancer (FC) teams. The script processes pipeline output from the MiSeq Universal pipeline (TSHC, CLL and TSMP panels) and summaries QC information in an HTML report. This report will then be reviewed by a Clinical Scientist within the HO or FC team and any fails recorded in the report will be investigated by the reviewer.
 
