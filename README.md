@@ -51,7 +51,7 @@ Table 3- Checks completed by the quality_check.py script for a single CLL worksh
 | 5  | ws_1 | VerifyBamId check | Percentage contamination is below 10%.    |
 | 6  | ws_1 | SRY check   | SRY Excel spreadsheet has been produced.               |
 | 7  | ws_1      | FLT3 ITD check                      | FLT3 ITD variants are present on the FLT3 tab for samples on this worksheet.   |
-| 8  | ws_1      | Gene 300x check                 | All samples in this worksheet have genes at >80% 200x.                   |
+| 8  | ws_1      | Gene 300x check                 | All samples in this worksheet have genes at >80% 300x.                   |
 | 9  | ws_1      | Exon 100x check                 | All samples in this worksheet have exon coverage at 100x. |
 
 In addition to the above checks being assigned a PASS or FAIL status, the report will also present additional information such as min and max VCF size, negative exon information of samples > 30 reads and number of alt reads and singletons present in the negative sample.
