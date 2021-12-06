@@ -13,7 +13,7 @@ parser.add_argument('-ws_2', action='store',
 parser.add_argument('-out_dir', action='store',
                     help='Specifing an output directory to store html reports')
 parser.add_argument('-s', action='store',
-                    help='SampleSheet requrired for HO panel quality checks')
+                    help='SampleSheet required for HO panel quality checks')
 args = parser.parse_args()
 
 
@@ -50,7 +50,7 @@ def tshc_get_inputs(ws_1, ws_2):
     if ws_1_panel == ws_2_panel:
         panel = ws_1_panel
     else:
-        raise Exception('Panels from ws_1 and ws_2 do not match!')
+        raise Exception('Worksheet 1 and worksheet 2 are from different panels!')
 
     # defining excel inputs
     ws_1_excel_reports = ws_1 + \
@@ -150,7 +150,7 @@ def tshc_neg_excel_check(neg_xls, check_result_df):
     '''
     2 independent checks on the negative sample excel report produced by the pipeline run (1 per pair):
         a) Numer of exons- In the 'Coverage-exon' tab 1350 exons should be present
-        b) Max number of reads in negative- In column M of the 'Coverage-exon' no max should be > 0
+        b) Max number of reads in negative- In column M of the 'Coverage-exon' max value should not be > 0
 
     A description of the checks and a PASS/FAIL result for a given check are then added to the check_result_df
     '''
@@ -493,7 +493,7 @@ def ho_main(panel, ws_1, sample_sheet):
 
     The following functions must be run to produce the quality check report:
 
-    1. Assign varaiables for samples in worksheet (ho_sort_inputs)
+    1. Assign variables for samples in worksheet (ho_sort_inputs)
     2. get_run details table 
     3. Run 9 independent checks and create output df
 
@@ -549,7 +549,7 @@ def ho_sort_inputs(panel, ws_1, sample_sheet):
     if sample_sheet == None:
         raise Exception(
             "A samplesheet has not been provided... check the command")
-
+    # patients result
     pat_results_list = []
 
     excel_base = ws_1 + f'excel_reports_{panel}_{worksheet}/'
@@ -847,7 +847,6 @@ def ho_sry_check(ho_inp, qcs_result_df):
 
     if sry_xls == None:
         sry_check_res = 'FAIL'
-        sry_df = pd.DataFrame()
 
     else:
         sry_check_res = 'PASS'
@@ -885,7 +884,7 @@ def ho_flt3_check(ho_inp, qcs_result_df):
         except:
             cll_ws_check = True
 
-    # Handle scenrio where FLT3 tab is empty for TSMP worksheets
+    # Handle scenario where FLT3 tab is empty for TSMP worksheets
     if flt3_fail_df.empty == False:
         flt3_fail_df = flt3_fail_df[[
             'Sample', 'AD', 'ALT-REF', 'Grouped AR (ALT-REF)', 'Grouped AB (ALT-REF)']]
@@ -1161,17 +1160,6 @@ def ho_generate_html_output(
         os.chdir(args.out_dir)
         with open(html_name, 'w') as file:
             file.write(html_report)
-
-
-def add_nest_tables(check_details, file_html, exon_html):
-
-    file_string = r'_vcf_min_max_'
-    exon_string = r'_neg_exon_depth_'
-
-    check_details = re.sub(f'{file_string}', f'{file_html}', check_details)
-    check_details = re.sub(f'{exon_string}', f'{exon_html}', check_details)
-    return check_details
-
 
 def ho_add_modals(html_report, modal_base, modal_tables, alt_call_num, gene_cov_thres):
     '''
