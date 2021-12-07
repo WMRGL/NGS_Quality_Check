@@ -5,6 +5,7 @@ import re
 import numpy as np
 import glob
 
+
 parser = argparse.ArgumentParser()
 parser.add_argument('-ws_1', action='store', required=True,
                     help='Path to worksheet 1 output files (TSHC/TSMP/CLL) include TSHC_<ws>_version dir')
@@ -97,6 +98,7 @@ def tshc_get_inputs(ws_1, ws_2):
     cmd_log_2 = ws_2 + '{}.commandline_usage_logfile'.format(ws_2_name)
     kin_xls = glob.glob(ws_1 + '*king.xlsx')[0]
 
+
     return xls_rep_1, xls_rep_2, neg_rep, fastq_bam_1, fastq_bam_2, kin_xls, vcf_dir_1, vcf_dir_2, cmd_log_1, cmd_log_2, panel
 
 
@@ -163,9 +165,11 @@ def tshc_neg_excel_check(neg_xls, check_result_df):
 
     # number of exons check
     num_exons_check = 'Number of exons in negative sample'
+
     num_exons_check_des = 'A check to determine if 1350 exons are present in the negative control (Coverage-exon tab)'
 
     if len(neg_exon_df) == 1350:
+
         num_exons_check_result = 'PASS'
     else:
         num_exons_check_result = 'FAIL'
@@ -202,11 +206,13 @@ def tshc_kinship_check(kin_xls, check_result_df):
     A check to determine if any sample the kinship.xls file has a kinship values of >=0.48
     A description of the check and a PASS/FAIL result for the check is then added to the check_result_df
     '''
+
     worksheet_name = re.search(
         r'\/(\d{6}_\d{6}).*.king.xlsx.*', kin_xls).group(1)
 
     tshc_kinship_check = 'Kinship check'
     tshc_kinship_check_des = 'A check to ensure that all samples in a worksheet pair have a kinship value of <0.48'
+
 
     xls = pd.ExcelFile(kin_xls)
     kinship_df = pd.read_excel(xls, 'Kinship')
@@ -365,8 +371,10 @@ def tshc_run_details(cmd, xls_rep, run_details_df):
     # get experiment name from command output
     with open(cmd, 'r') as file:
         cmd_text = file.read()
+
     search_term = r'-s\s\n\/network\/sequenced\/MiSeq_data\/(TSHC)\/.*(?:' + re.escape(
         worksheet) + r')?\/(\d{6}_M\d{5}_\d{4}_\d{9}-\w{5})\/.*'
+
 
     try:
         experiment_name = re.search(search_term, cmd_text).group(2)
