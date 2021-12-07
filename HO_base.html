@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+</head>
+
+<body>
+    <div class="container-fluid">
+        <h1 class="text-center">_panel_name_ Quality Report</h1>
+        <h2 class="text-left">Pipeline checks</h2>
+    </div>
+    <div class="container-fluid">
+        {run_details_html}
+    </div>
+    <div class="container-fluid">
+        {pipeline_check_html}
+    </div>
+    <div class="container-fluid">
+        <h2>QC summary</h2>
+    </div>
+    <div class="container-fluid">
+        {qcs_results_html}
+    </div>
+    <div class="container-fluid">
+        <h2>Pre analysis checks</h2>
+    </div>
+    <div class="container-fluid">
+        {pac_results_html}
+    </div>    
+</body>
+</hml>
