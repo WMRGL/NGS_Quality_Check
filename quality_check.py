@@ -1155,8 +1155,8 @@ def ho_generate_html_output(
     worksheet_num = run_details_df['Worksheet'].squeeze()
     html_name = f'{worksheet_num}_{panel}_quality_checks.html'
 
-    ws_1_out = args.ws_1
-    # save HTML report into result output dir
+    ws_1_out = args.ws_1 + f'excel_reports_{panel}_{worksheet_num}/'
+    # save HTML report into excel reports directory
     if args.out_dir == None:
         os.chdir(ws_1_out)
         print(f'Saving {html_name} report to {ws_1_out}')
