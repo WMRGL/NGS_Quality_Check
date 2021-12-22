@@ -4,6 +4,7 @@ import argparse
 import re
 import numpy as np
 import glob
+import tempfile
 
 
 parser = argparse.ArgumentParser()
@@ -641,29 +642,68 @@ def ho_run_details(ho_inp):
     return ho_details_df
 
 
+def create_samplesheet_df(ss_path):
+    """Take samplesheet path that is from W7/W10 runs and return compatible ss.
+
+    W7 samplesheets are true CSVs, ie. have appropriate number of columns even
+    on blank lines, eg.:
+        [Data],,,,,,,,,
+        h1,h2,h3,h4,h5,h6,h7,h8,h9,h10
+    Whereas W10 samplesheets are not true CSVs and skip commas when lines are
+    blank or only contain a smaller number of values, eg:
+        [Data]
+        h1,h2,h3,h4,h5,h6,h7,h8,h9,h10
+    This function creates a samplesheet dataframe excluding all samplesheet
+    headers (ie. that info which is above h1,h2... in the example above) and
+    returns the df along with the list of actual column headers used in the df.
+
+    Args:
+        ss_path (str): path to desired samplesheet for data extraction.
+
+    Returns:
+        column_list (list): list of [Data] headers included in the given ss
+        samplesheet_df: a pandas.DataFrame containing samplesheet [Data] data
+    """
+    with open(ss_path, 'r') as f_in:
+        # fetch all lines from samplesheet
+        lines = f_in.readlines()
+
+    data_lines = None
+    for i in range(len(lines)):
+        # seek through file to find the data lines and make new list of them
+        if not '[Data]' in lines[i]: continue
+        data_lines = lines[i+1:]
+        break
+    assert data_lines, f"No [Data] lines found in SampleSheet at:\n {ss_path}"
+
+    # use tempfile as this is deleted outside of the context manager
+    with tempfile.NamedTemporaryFile(mode='wt', suffix='.csv') as f_temp:
+        # create temp ss file with only the [Data] table, excluding [Data] line
+        f_temp.writelines(data_lines)
+        f_temp.seek(0)
+        # extract data as dataframe
+        sample_df = pd.read_csv(f_temp.name)
+    column_list = sample_df.columns
+
+    return column_list, sample_df
+
+
 def ho_vcf_check(ho_inp, qcs_result_df):
     '''
     A check to determine if the number of VCFs generated
     is 2x the number of samples in the sample sheet
     '''
 
-    sample_sheet_path = ho_inp['sample_sheet']
     vcf_dir_path = ho_inp['vcf_directory']
-    sample_sheet_xls = pd.read_csv(sample_sheet_path)
-    # split sample sheet into section containing sample names
-    # The start position of the data section differs between TSMP and CLL
-    if ho_inp['panel'] == 'TSMP':
-        column_list = sample_sheet_xls.iloc[19:20].squeeze().to_list()
-        sample_df = pd.DataFrame(sample_sheet_xls.iloc[20:])
-    elif ho_inp['panel'] == 'CLL':
-        column_list = sample_sheet_xls.iloc[18:19].squeeze().to_list()
-        sample_df = pd.DataFrame(sample_sheet_xls.iloc[19:])
-    else:
-        raise "Check SampleSheet... The Sample_ID headers are not in the correct place."
+
+    # TC 21/12/21: add support for W10 samplesheet lacking commas
+    column_list, sample_df = create_samplesheet_df(ho_inp['sample_sheet'])
 
     sample_df.columns = column_list
     num_sample = sample_df['Sample_ID'].count()
-    # The number of vcfs present in the VCF output folder should be 2x number of samples on samplesheet
+
+    # The number of vcfs present in the VCF output folder should be 2x number 
+    # of samples on samplesheet
     num_exp = num_sample * 2
 
     vcf_search = vcf_dir_path + '*.vcf*'
