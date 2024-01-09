@@ -352,7 +352,7 @@ def tshc_run_details(cmd, xls_rep, run_details_df):
     # get ws names for the cmd file and
     cmd_ws = re.search(r'(\d{6})\.commandline_usage_logfile', cmd)
     xls_ws = re.search(
-        r'(\d{6})-\d{2}-D\d{2}-\d{5}-\w{2,3}-\w+-\d{3}_S\d+\.v\d\.\d\.\d-results\.xlsx', xls_rep)
+        r'(\d{6})-\d{2}-D\d{2}-\d{5,6}-\w{2,3}-\w+-\d{3}_S\d+\.v\d\.\d\.\d-results\.xlsx', xls_rep)
 
     if cmd_ws == None:
         raise Exception('Input error- issue with commandline_usage_logfile')
