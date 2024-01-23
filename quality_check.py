@@ -120,7 +120,7 @@ def tshc_results_excel_check(res, check_result_df):
 
     # list of all % coverage at 20x (excluding control)
     coverage_list = hybqc_df[~hybqc_df['Sample'].str.contains(
-        'D00-00000')]['PCT_TARGET_BASES_20X'].values
+        '|'.join(['D00-00000',"D00-000000"]))]['PCT_TARGET_BASES_20X'].values
     coverage_check = '20x coverage check'
     coverage_check_des = 'A check to determine if 96% of all target bases in each sample are covered at >=20X'
     coverage_result = 'PASS'
